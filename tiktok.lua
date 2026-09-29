@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.8",
+	VERSION = "1.2.9",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -437,7 +437,7 @@ K.LOGO_SVG = string.format([[<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1
 </svg>]], K.LOGO_PATH, K.LOGO_PATH, K.LOGO_PATH)
 K.JS_WRAP = [[(function(){var PID='%s',ID='%s';var c=$.GetContextPanel();var r=c;while(r.GetParent())r=r.GetParent();var par=(c.id==PID)?c:((r.id==PID)?r:r.FindChildTraverse(PID));if(!par){$.Msg('[TikTok] parent not found');return;}var p=ID?par.FindChildTraverse(ID):null;%s})()]]
 K.HIDDEN_STYLE = "x: -9999px; y: -9999px; width: 0px; height: 0px; visibility: collapse;"
-K.JS_KIDS = [[if(!p)return;$.Schedule(2,function(){if(!p.IsValid())return;var out=[];var walk=function(q,d){var n=q.GetChildCount();for(var i=0;i<n;i++){var c=q.GetChild(i);if(!c)continue;out.push(d+':'+c.paneltype+'#'+(c.id||'')+' '+c.actuallayoutwidth+'x'+c.actuallayoutheight+' vis='+c.visible);walk(c,d+1);c.visible=false;}};walk(p,0);par.SetAttributeString('tt_kids',out.length?out.join(' ; '):'none');});]]
+K.JS_KIDS = [[if(!p)return;var hide=function(){if(!p.IsValid())return null;var out=[];var n=p.GetChildCount();for(var i=0;i<n;i++){var c=p.GetChild(i);if(!c||c.id!='MousePanningImage')continue;c.visible=false;try{c.style.opacity='0';c.style.width='0px';c.style.height='0px';}catch(e){}out.push(c.id);}return out;};var loop=function(){var r=hide();if(!r)return;if(!par.GetAttributeString('tt_kids',''))par.SetAttributeString('tt_kids',r.length?r.join(','):'none');$.Schedule(1,loop);};$.Schedule(0.5,loop);]]
 K.JS_KILL = [[if(!p)return;if(p.SetURL)p.SetURL('about:blank');p.hittest=false;p.visible=false;p.DeleteAsync(0);]]
 K.JS_CLEAN = [[var ch=par.Children();for(var i=0;i<ch.length;i++){var id=ch[i].id||'';if(id.indexOf('TikTokWebPanel')==0||id.indexOf('TikTokHit')==0){if(ch[i].SetURL)ch[i].SetURL('about:blank');ch[i].hittest=false;ch[i].visible=false;ch[i].DeleteAsync(0);}}]]
 K.JS_FOCUS = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.SetAttributeString('tt_focus',(had?'kept':'set')+' bridge key='+p.BHasKeyFocus());]]
@@ -446,7 +446,7 @@ K.JS_FOCUS_WEB = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();pa
 K.JS_INJECT = [[if(!p)return;p.SetURL('javascript:'+encodeURIComponent(%s+';void '+Date.now()));]]
 K.JS_KEY = [[var a=[];try{a=JSON.parse(par.GetAttributeString('tt_q','[]'))||[];}catch(e){}a.push(['k','%s',%d]);par.SetAttributeString('tt_q',JSON.stringify(a));]]
 K.WATCH_JS = [==[(function(){var w=window;
-var mark=function(s){var d=document,ot=d.title;if(ot.indexOf('tt:')==0)ot=w.__tto||'';else w.__tto=ot;var mk='tt:'+s+':'+(w.__ttk=(w.__ttk||0)+1);d.title=mk;setTimeout(function(){if(d.title==mk)d.title=ot;},500);};
+var mark=function(s){var d=document,ot=d.title;if(ot.indexOf('tt:')>=0)ot=w.__tto||'';else w.__tto=ot;var mk='tt:'+s+':'+(w.__ttk=(w.__ttk||0)+1);d.title=mk;setTimeout(function(){if(d.title.indexOf(mk)>=0)d.title=ot;},500);};
 if(w.__ttw){w.__ttw(true);return;}
 var deep=function(){var d=document,e=d.activeElement;try{while(e&&/^i?frame$/i.test(e.tagName)&&e.contentDocument){d=e.contentDocument;e=d.activeElement;}}catch(x){}
 while(e&&e.shadowRoot&&e.shadowRoot.activeElement)e=e.shadowRoot.activeElement;return e;};
@@ -518,7 +518,7 @@ return;}
 var s=W.getSelection();if(!s||!s.modify)return;
 s.modify(sh?'extend':'move',fw?'forward':'backward',(a=='left'||a=='right')?(ct?'word':'character'):(a=='up'||a=='down')?'line':(ct?'documentboundary':'lineboundary'));
 })();}catch(x){r='err.'+x;}
-try{var w0=window,dd=document,ot=dd.title;w0.__ttn=(w0.__ttn||0)+1;if(w0.__ttn<=4){if(ot.indexOf('tt:')==0)ot=w0.__tto||'';else w0.__tto=ot;var mk='tt:r:'+String(r||'done').replace(/:/g,'.')+':'+(w0.__ttk=(w0.__ttk||0)+1);dd.title=mk;setTimeout(function(){if(dd.title==mk)dd.title=ot;},600);}}catch(x){}})]==]
+try{var w0=window,dd=document,ot=dd.title;w0.__ttn=(w0.__ttn||0)+1;if(w0.__ttn<=4){if(ot.indexOf('tt:')>=0)ot=w0.__tto||'';else w0.__tto=ot;var mk='tt:r:'+String(r||'done').replace(/:/g,'.')+':'+(w0.__ttk=(w0.__ttk||0)+1);dd.title=mk;setTimeout(function(){if(dd.title.indexOf(mk)>=0)dd.title=ot;},600);}}catch(x){}})]==]
 K.JS_CREATE =[[var B='%s',U='%s',PAGE=%s,WATCH=%s,MENU=%d;var types=['HTML','DOTAHTMLPanel','DOTAWebBrowser'];var info=[];var ok=null;
 for(var i=0;i<types.length&&!ok;i++){var t=types[i],id=B+'_'+i,q=null;
 try{q=$.CreatePanel(t,par,id,{url:U,acceptsinput:'true',acceptsfocus:'true'});}catch(e){info.push(t+' props!'+e);try{q=$.CreatePanel(t,par,id);}catch(e2){info.push(t+'!'+e2);}}
@@ -531,10 +531,10 @@ var st='',real=U,nn=0,ptries=0;
 var setst=function(s){st=s;par.SetAttributeString('tt_inject',s);};
 var inj=function(c){if(ok.IsValid())ok.SetURL('javascript:'+encodeURIComponent(c+';void '+(++nn)));};
 var probe=function(){if(st=='ok'||st=='fail'||!ok.IsValid())return;if(ptries>=5){setst('fail');return;}ptries++;setst('probe'+ptries);inj(WATCH);$.Schedule(2.5,probe);};
-var fb=function(t){var ps=t.split(':'),kind=ps[1]||'',body=ps.slice(2,ps.length-1).join(':');if(st!='ok')setst('ok');par.SetAttributeString('tt_mark',ps[ps.length-1]||'');
+var fb=function(m){var kind=m[1],body=m[2];if(st!='ok')setst('ok');par.SetAttributeString('tt_mark',m[3]);
 if(kind=='e')par.SetAttributeString('tt_edit',body);else if(kind=='k')par.SetAttributeString('tt_k',body);else par.SetAttributeString('tt_fb',kind+' '+body);};
 var tries=0,pending=false;var check=function(u,t){u=u||'';t=t||'';
-if(t.indexOf('tt:')==0){fb(t);return;}
+var mm=/tt:([a-z]+):([^:]*):([0-9]+)/.exec(t);if(mm){fb(mm);return;}if(t.indexOf('tt:')>=0)return;
 if(u.indexOf('javascript:')==0)return;
 if(u.indexOf('javascript')>=0||t.indexOf('javascript:')==0){if(st!='ok'){par.SetAttributeString('tt_fb','broken');setst('fail');ok.SetURL(real);}return;}
 if(u.indexOf('http')==0){real=u;par.SetAttributeString('tt_url',u);}
@@ -1283,10 +1283,8 @@ function act.open(url)
 	drop_hit("grip")
 	state.open = true
 	state.kids_logged = false
-	if not state.parent_in_game then
-		state.parent:SetAttribute("tt_kids", "")
-		parent_js(K.JS_KIDS)
-	end
+	state.parent:SetAttribute("tt_kids", "")
+	parent_js(K.JS_KIDS)
 	log("window open " .. url)
 end
 
@@ -1590,7 +1588,7 @@ local function draw()
 			local kids = state.parent:GetAttribute("tt_kids", "") or ""
 			if kids ~= "" then
 				state.kids_logged = true
-				log("menu web children hidden: " .. kids)
+				log("web panning icon hidden: " .. kids)
 			end
 		end
 		watch_page(now)
