@@ -343,10 +343,6 @@ local localization = qLocalization.new({
 		tt_width = "Width",
 		tt_height = "Height",
 		tt_win_alpha = "Opacity",
-		tt_start_page = "Start page",
-		tt_page_foryou = "For You",
-		tt_page_following = "Following",
-		tt_page_explore = "Explore",
 		tt_auto_death = "Open on death",
 		tt_auto_death_tip = "Opens the window when your hero dies",
 		tt_gear_death = "On death",
@@ -383,10 +379,6 @@ local localization = qLocalization.new({
 		tt_width = "Ширина",
 		tt_height = "Высота",
 		tt_win_alpha = "Прозрачность",
-		tt_start_page = "Стартовая страница",
-		tt_page_foryou = "Рекомендации",
-		tt_page_following = "Подписки",
-		tt_page_explore = "Интересное",
 		tt_auto_death = "Открывать при смерти",
 		tt_auto_death_tip = "Открывает окно, когда герой умер",
 		tt_gear_death = "При смерти",
@@ -403,14 +395,13 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.1.0",
+	VERSION = "1.2.0",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
-	URL_BASE = "https://www.tiktok.com/",
+	URL_START = "https://www.tiktok.com/foryou",
 	URL_LOGIN = "https://www.tiktok.com/login/qrcode",
 	URL_BLANK = "about:blank",
-	PAGES = { "foryou", "following", "explore" },
 	HUD_PARENTS = { "Hud", "DotaHud" },
 	MENU_PARENTS = { "DotaDashboard", "Dashboard" },
 	HEADER_H = 28,
@@ -425,6 +416,11 @@ local K = {
 	GRIP = 16,
 	DRAG_THRESHOLD = 4,
 	DEATH_INTERVAL = 0.2,
+	FOCUS_INTERVAL = 0.2,
+	PULL_INTERVAL = 0.05,
+	REPEAT_DELAY = 0.45,
+	REPEAT_RATE = 0.035,
+	RELEASE_GRACE = 0.15,
 	LOGO_PX = 128,
 	TEXT = Color(235, 235, 240, 255),
 	MUTED = Color(160, 160, 170, 255),
@@ -441,9 +437,59 @@ K.JS_WRAP = [[(function(){var PID='%s',ID='%s';var c=$.GetContextPanel();var r=c
 K.HIDDEN_STYLE = "x: -9999px; y: -9999px; width: 0px; height: 0px; visibility: collapse;"
 K.JS_KILL = [[if(!p)return;if(p.SetURL)p.SetURL('about:blank');p.hittest=false;p.visible=false;p.DeleteAsync(0);]]
 K.JS_CLEAN = [[var ch=par.Children();for(var i=0;i<ch.length;i++){var id=ch[i].id||'';if(id.indexOf('TikTokWebPanel')==0||id.indexOf('TikTokHit')==0){if(ch[i].SetURL)ch[i].SetURL('about:blank');ch[i].hittest=false;ch[i].visible=false;ch[i].DeleteAsync(0);}}]]
-K.JS_FOCUS = [[if(!p)return;var r=[];['SetAcceptsInput','SetAcceptsFocus','SetTopOfInputContext','SetIgnoreCursor'].forEach(function(f){try{p[f](true);}catch(e){r.push(f+'!'+e);}});try{p.SetDisableFocusOnMouseDown(false);}catch(e){r.push('SetDisableFocusOnMouseDown!'+e);}p.SetFocus();r.push('key='+p.BHasKeyFocus());par.SetAttributeString('tt_focus',r.join(' '));]]
-K.JS_BLUR = [[if(!p)return;try{p.SetTopOfInputContext(false);}catch(e){}$.DispatchEvent('DropInputFocus',p);]]
-K.JS_CREATE =[[var B='%s',U='%s';var types=['HTML','DOTAHTMLPanel','DOTAWebBrowser'];var info=[];var ok=null;
+K.JS_FOCUS = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.SetAttributeString('tt_focus',(had?'kept':'set')+' key='+p.BHasKeyFocus());]]
+K.JS_BLUR = [[if(!p)return;if(p.BHasKeyFocus())$.DispatchEvent('DropInputFocus',p);]]
+K.JS_PULL = [[if(!p)return;var s=p.text;if(!s)return;p.text='';var h=par.FindChildTraverse('%s');if(!h||!h.RunJavascript)return;h.RunJavascript(par.GetAttributeString('tt_page','')+'("text",'+JSON.stringify(s)+',0)');par.SetAttributeString('tt_pull',''+s.length);]]
+K.JS_EDIT = [[if(!p||!p.RunJavascript)return;var P=par.GetAttributeString('tt_page','');var te=par.FindChildTraverse('%s');if(te&&te.text){var s=te.text;te.text='';p.RunJavascript(P+'("text",'+JSON.stringify(s)+',0)');}p.RunJavascript(P+'("%s","",%d)');]]
+K.PAGE_JS = [==[(function(a,t,m){try{
+var d=document,e=d.activeElement;
+try{while(e&&/^i?frame$/i.test(e.tagName)&&e.contentDocument){d=e.contentDocument;e=d.activeElement;}}catch(x){}
+while(e&&e.shadowRoot&&e.shadowRoot.activeElement)e=e.shadowRoot.activeElement;
+if(e==d.body||e==d.documentElement)e=null;
+var W=d.defaultView||window,tn=e?e.tagName:'';
+var tf=tn=='TEXTAREA'||(tn=='INPUT'&&/^(text|search|email|url|tel|password|number)?$/i.test(e.getAttribute('type')||''));
+var ed=tf||(!!e&&e.isContentEditable);
+var sh=(m&1)>0,ct=(m&2)>0,tg=e||d.body||d.documentElement;
+function cmd(c,v){try{return d.execCommand(c,false,v);}catch(x){return false;}}
+function ev(tp,k,c,cd){var o=new W.KeyboardEvent(tp,{key:k,code:cd,bubbles:true,cancelable:true,composed:true,shiftKey:sh,ctrlKey:ct,keyCode:c,which:c,charCode:tp=='keypress'?c:0});
+try{Object.defineProperty(o,'keyCode',{get:function(){return c;}});Object.defineProperty(o,'which',{get:function(){return c;}});}catch(x){}
+return tg.dispatchEvent(o);}
+function key(k,c,cd,p){var r=ev('keydown',k,c,cd);if(r&&p)r=ev('keypress',k,c,cd);ev('keyup',k,c,cd);return r;}
+function put(s,i,j){try{e.setRangeText(s,i,j,'end');e.dispatchEvent(new W.InputEvent('input',{bubbles:true,inputType:s?'insertText':'deleteContentBackward',data:s||null}));}catch(x){}}
+function wl(v,i){var q=v.slice(0,i).search(/\S+\s*$/);return q<0?0:q;}
+function wr(v,i){var r=v.slice(i).match(/^\s*\S+/);return r?i+r[0].length:v.length;}
+if(a=='text'){
+if(ed){if(e.focus)e.focus();if(!cmd('insertText',t)&&tf)put(t,e.selectionStart,e.selectionEnd);return;}
+for(var n=0;n<t.length;n++){var ch=t.charAt(n);key(ch,ch.toUpperCase().charCodeAt(0),ch==' '?'Space':'',true);}
+return;}
+var KS={back:['Backspace',8],del:['Delete',46],enter:['Enter',13],left:['ArrowLeft',37],right:['ArrowRight',39],up:['ArrowUp',38],down:['ArrowDown',40],home:['Home',36],end:['End',35],pgup:['PageUp',33],pgdn:['PageDown',34],tab:['Tab',9],esc:['Escape',27],a:['a',65,'KeyA'],c:['c',67,'KeyC'],x:['x',88,'KeyX'],z:['z',90,'KeyZ'],y:['y',89,'KeyY']};
+var k=KS[a];if(!k||!key(k[0],k[1],k[2]||k[0],a=='enter'))return;
+if(a=='c'){cmd('copy');return;}
+if(!ed||a=='pgup'||a=='pgdn'||a=='tab'||a=='esc')return;
+if(a=='x'){cmd('cut');return;}
+if(a=='z'||a=='y'){cmd(a=='z'?'undo':'redo');return;}
+if(a=='a'){if(tf)e.select();else cmd('selectAll');return;}
+if(a=='enter'){if(tn=='INPUT'){if(e.form&&e.form.requestSubmit)e.form.requestSubmit();}else if(tf){if(!cmd('insertText','\n'))put('\n',e.selectionStart,e.selectionEnd);}else if(!cmd('insertParagraph'))cmd('insertLineBreak');return;}
+var fw=a=='del'||a=='right'||a=='end'||a=='down';
+if(a=='back'||a=='del'){
+if(tf){var v=e.value,i=e.selectionStart,j=e.selectionEnd;if(i==null)return;
+if(i==j&&ct){if(fw)j=wr(v,j);else i=wl(v,i);e.setSelectionRange(i,j);}
+if(!cmd(fw?'forwardDelete':'delete')){if(i==j){if(fw)j++;else i--;}if(i<0)i=0;if(i!=j)put('',i,j);}
+return;}
+var g=W.getSelection();if(ct&&g&&g.isCollapsed&&g.modify)g.modify('extend',fw?'forward':'backward','word');
+cmd(fw?'forwardDelete':'delete');return;}
+if(tf){var v2=e.value,i2=e.selectionStart,j2=e.selectionEnd;if(i2==null)return;
+var bk=e.selectionDirection=='backward',f=bk?i2:j2,an=bk?j2:i2,L=v2.length,p;
+if(a=='left'||a=='right'){if(i2!=j2&&!sh&&!ct)p=fw?j2:i2;else if(ct)p=fw?wr(v2,f):wl(v2,f);else p=fw?Math.min(L,f+1):Math.max(0,f-1);}
+else if(tn=='TEXTAREA'&&(a=='up'||a=='down'))return;
+else if(tn=='TEXTAREA'&&!ct){if(fw){p=v2.indexOf('\n',f);if(p<0)p=L;}else p=f?v2.lastIndexOf('\n',f-1)+1:0;}
+else p=fw?L:0;
+if(sh)e.setSelectionRange(Math.min(an,p),Math.max(an,p),p<an?'backward':'forward');else e.setSelectionRange(p,p);
+return;}
+var s=W.getSelection();if(!s||!s.modify)return;
+s.modify(sh?'extend':'move',fw?'forward':'backward',(a=='left'||a=='right')?(ct?'word':'character'):(a=='up'||a=='down')?'line':(ct?'documentboundary':'lineboundary'));
+}catch(x){}})]==]
+K.JS_CREATE =[[var B='%s',U='%s',PAGE=%s;var types=['HTML','DOTAHTMLPanel','DOTAWebBrowser'];var info=[];var ok=null;
 for(var i=0;i<types.length&&!ok;i++){var t=types[i],id=B+'_'+i,q=null;
 try{q=$.CreatePanel(t,par,id,{url:U,acceptsinput:'true',acceptsfocus:'true'});}catch(e){info.push(t+' props!'+e);try{q=$.CreatePanel(t,par,id);}catch(e2){info.push(t+'!'+e2);}}
 if(!q){info.push(t+' null');continue;}
@@ -452,8 +498,41 @@ if(q.paneltype==t){ok=q;info.unshift('ok:'+id);}else{q.DeleteAsync(0);}}
 if(ok){try{ok.SetIgnoreCursor(true);info.push('ignorecursor');}catch(e){info.push('SetIgnoreCursor!'+e);}
 var tries=0,pending=false;var check=function(u,t){t=t||'';par.SetAttributeString('tt_load',(u||'')+' | '+t+' | retry='+tries);if(t.indexOf('Access Denied')<0&&t.indexOf('Error')!=0){if(u)tries=0;return;}if(pending||tries>=3)return;pending=true;tries++;$.Schedule(1+tries*2,function(){pending=false;if(ok.IsValid())ok.SetURL((tries&1)==1?'https://www.tiktok.com/':U);});};
 try{$.RegisterEventHandler('HTMLFinishRequest',ok,function(p,u,t){check(u,t);});$.RegisterEventHandler('HTMLTitle',ok,function(p,t){check('',t);});info.push('loadwatch');}catch(e){info.push('loadwatch!'+e);}
+info.push('rj='+(typeof ok.RunJavascript));par.SetAttributeString('tt_page',PAGE);
+var te=null;try{te=$.CreatePanel('TextEntry',par,B+'_in');}catch(e){info.push('bridge!'+e);}
+if(te){te.hittest=false;try{te.hittestchildren=false;}catch(e){}try{te.style.width='2px';te.style.height='2px';te.style.opacity='0.01';}catch(e){info.push('te_style!'+e);}
+try{te.SetMaxChars(4096);}catch(e){}try{te.RaiseChangeEvents(true);}catch(e){}
+var sent=0,how='';var fwd=function(src){if(!te.IsValid())return false;var s=te.text;if(!s)return true;te.text='';if(!ok.IsValid()||!ok.RunJavascript)return true;ok.RunJavascript(PAGE+'("text",'+JSON.stringify(s)+',0)');sent+=s.length;if(how.indexOf(src)<0)how+=src;par.SetAttributeString('tt_typed',how+':'+sent);return true;};
+try{$.RegisterEventHandler('TextEntryChanged',te,function(){fwd('E');});}catch(e){info.push('te_event!'+e);}
+var loop=function(){if(fwd('P'))$.Schedule(0.03,loop);};$.Schedule(0.03,loop);
+info.push('bridge:'+te.id);}
 try{if(ok.SetURL)ok.SetURL(U);}catch(e){info.push('SetURL!'+e);}}
 par.SetAttributeString('tt_report',info.join(' | '));]]
+
+do
+	local B = Enum.ButtonCode
+	K.EDIT_KEYS = {
+		[B.KEY_BACKSPACE] = "back",
+		[B.KEY_DELETE] = "del",
+		[B.KEY_ENTER] = "enter",
+		[B.KEY_PAD_ENTER] = "enter",
+		[B.KEY_LEFT] = "left",
+		[B.KEY_RIGHT] = "right",
+		[B.KEY_UP] = "up",
+		[B.KEY_DOWN] = "down",
+		[B.KEY_HOME] = "home",
+		[B.KEY_END] = "end",
+		[B.KEY_PAGEUP] = "pgup",
+		[B.KEY_PAGEDOWN] = "pgdn",
+		[B.KEY_TAB] = "tab",
+		[B.KEY_ESCAPE] = "esc",
+	}
+	K.CTRL_KEYS = { [B.KEY_A] = "a", [B.KEY_C] = "c", [B.KEY_X] = "x", [B.KEY_Z] = "z", [B.KEY_Y] = "y" }
+	K.REPEAT = { back = true, del = true, left = true, right = true, up = true, down = true }
+	K.POLL_KEYS = {}
+	for key in pairs(K.EDIT_KEYS) do K.POLL_KEYS[#K.POLL_KEYS + 1] = key end
+	for key in pairs(K.CTRL_KEYS) do K.POLL_KEYS[#K.POLL_KEYS + 1] = key end
+end
 
 local ui = {}
 local act = {}
@@ -498,8 +577,6 @@ do
 	ui.win_h:Icon("\u{f338}")
 	ui.win_alpha = g_win:Slider("tt_win_alpha", 20, 100, 100, "%d%%")
 	ui.win_alpha:Icon("\u{f042}")
-	ui.start_page = g_win:Combo("tt_start_page", { "tt_page_foryou", "tt_page_following", "tt_page_explore" }, 0)
-	ui.start_page:Icon("\u{f015}")
 
 	ui.auto_death = g_win:Switch("tt_auto_death", true, "\u{f54c}")
 	ui.auto_death:ToolTip("tt_auto_death_tip")
@@ -517,7 +594,7 @@ end
 
 local function refresh_disabled()
 	local on = ui.enable:Get()
-	for _, w in ipairs({ ui.scope, ui.key, ui.icon, ui.auto_death, ui.win_w, ui.win_h, ui.win_alpha, ui.start_page }) do
+	for _, w in ipairs({ ui.scope, ui.key, ui.icon, ui.auto_death, ui.win_w, ui.win_h, ui.win_alpha }) do
 		w:Disabled(not on)
 	end
 end
@@ -565,6 +642,21 @@ local state = {
 	web_focus = false,
 	fade = 0,
 	fade_clock = nil,
+	input = nil,
+	input_id = nil,
+	input_style = "",
+	keys = {},
+	poll_prev = {},
+	edit_queue = {},
+	edit_logged = {},
+	key_events = false,
+	focus_at = 0,
+	focus_report = "",
+	focus_ok = false,
+	pull_at = 0,
+	typed = "",
+	pulled = false,
+	bind_down = {},
 }
 
 local function log(text)
@@ -621,8 +713,8 @@ local function clamp_positions()
 	state.win.y = clamp(state.win.y, 0, s.y - ui.win_h:Get() - K.HEADER_H)
 end
 
-local function start_url()
-	return K.URL_BASE .. (K.PAGES[ui.start_page:Get() + 1] or K.PAGES[1])
+local function js_str(s)
+	return "'" .. s:gsub("\\", "\\\\"):gsub("'", "\\'"):gsub("\r?\n", "\\n") .. "'"
 end
 
 local function overlay_open(url)
@@ -662,6 +754,11 @@ end
 
 local function parent_js(body)
 	return js_in(state.parent, state.parent_id, state.panel_id, body)
+end
+
+local function input_js(body)
+	if not state.input_id then return false end
+	return js_in(state.parent, state.parent_id, state.input_id, body)
 end
 
 local function disarm(panel)
@@ -801,14 +898,117 @@ local function read_report()
 end
 
 local function focus_web(on)
-	if not panel_valid() or (not on and not state.web_focus) then return end
-	local changed = on ~= state.web_focus
+	if on == state.web_focus then return end
 	state.web_focus = on
-	parent_js(on and K.JS_FOCUS or K.JS_BLUR)
-	local report = on and (state.parent:GetAttribute("tt_focus", "") or "") or ""
-	if changed or report ~= "key=true" then
-		log("web focus " .. tostring(on) .. (report ~= "" and (" " .. report) or ""))
+	state.focus_at = 0
+	state.keys = {}
+	state.edit_queue = {}
+	if not on then
+		if state.input_id then input_js(K.JS_BLUR) else parent_js(K.JS_BLUR) end
 	end
+	log("web focus " .. tostring(on))
+end
+
+local function keep_focus(now, mouse_down)
+	if not (state.web_focus and panel_valid()) or mouse_down or now < state.focus_at then return end
+	state.focus_at = now + K.FOCUS_INTERVAL
+	if state.input_id then input_js(K.JS_FOCUS) else parent_js(K.JS_FOCUS) end
+	local report = state.parent:GetAttribute("tt_focus", "") or ""
+	if report:find("key=false", 1, true) then
+		if report ~= state.focus_report then log("input focus failed: " .. report) end
+	elseif not state.focus_ok and report ~= "" then
+		state.focus_ok = true
+		log("input focus " .. report)
+	end
+	state.focus_report = report
+end
+
+local function pull_text(now)
+	if not state.input_id or state.typed:find("E", 1, true) or now < state.pull_at then return end
+	state.pull_at = now + K.PULL_INTERVAL
+	input_js(string.format(K.JS_PULL, state.panel_id))
+end
+
+local function watch_typing()
+	local typed = state.parent:GetAttribute("tt_typed", "") or ""
+	local how = typed:match("^(%a+):") or ""
+	if how ~= state.typed then
+		state.typed = how
+		log("typing forwarded " .. typed)
+	end
+	if not state.pulled and (state.parent:GetAttribute("tt_pull", "") or "") ~= "" then
+		state.pulled = true
+		log("typing forwarded by lua pull")
+	end
+end
+
+local function key_held(a, b)
+	return Input.IsKeyDown(a, true) or Input.IsKeyDown(b, true)
+end
+
+local function edit_action(key)
+	local B = Enum.ButtonCode
+	if key_held(B.KEY_LALT, B.KEY_RALT) then return nil end
+	if K.EDIT_KEYS[key] then return K.EDIT_KEYS[key] end
+	if key_held(B.KEY_LCONTROL, B.KEY_RCONTROL) then return K.CTRL_KEYS[key] end
+	return nil
+end
+
+local function press_edit(key, action, src)
+	local B = Enum.ButtonCode
+	local mods = (key_held(B.KEY_LSHIFT, B.KEY_RSHIFT) and 1 or 0) + (key_held(B.KEY_LCONTROL, B.KEY_RCONTROL) and 2 or 0)
+	local now = os.clock()
+	state.keys[key] = { action = action, mods = mods, src = src, t = now, next = now + K.REPEAT_DELAY }
+	state.edit_queue[#state.edit_queue + 1] = { action, mods }
+	if not state.edit_logged[src] then
+		state.edit_logged[src] = true
+		log("edit key " .. action .. " via " .. src)
+	end
+end
+
+local function poll_edit_keys(now)
+	for _, key in ipairs(K.POLL_KEYS) do
+		local down = Input.IsKeyDown(key, true)
+		local rising = down and not state.poll_prev[key]
+		state.poll_prev[key] = down
+		local h = state.keys[key]
+		if h then
+			if not down then
+				if h.src == "poll" or now - h.t > K.RELEASE_GRACE then state.keys[key] = nil end
+			elseif K.REPEAT[h.action] and now >= h.next then
+				h.next = now + K.REPEAT_RATE
+				state.edit_queue[#state.edit_queue + 1] = { h.action, h.mods }
+			end
+		elseif rising and state.web_focus and state.input_id and not state.key_events then
+			local action = edit_action(key)
+			if action then press_edit(key, action, "poll") end
+		end
+	end
+end
+
+local function flush_edits()
+	local queue = state.edit_queue
+	if #queue == 0 then return end
+	state.edit_queue = {}
+	if not panel_valid() then return end
+	for _, item in ipairs(queue) do
+		parent_js(string.format(K.JS_EDIT, state.input_id or "", item[1], item[2]))
+	end
+end
+
+local function edit_key_event(data)
+	local held = state.keys[data.key]
+	if data.event == Enum.EKeyEvent.EKeyEvent_KEY_UP then
+		if not held then return true end
+		state.keys[data.key] = nil
+		return false
+	end
+	if data.event ~= Enum.EKeyEvent.EKeyEvent_KEY_DOWN or not (state.open and state.web_focus and state.input_id) then return true end
+	local action = held and held.action or edit_action(data.key)
+	if not action then return true end
+	state.key_events = true
+	if not held then press_edit(data.key, action, "event") end
+	return false
 end
 
 local function set_url(url)
@@ -827,6 +1027,12 @@ local function window_style()
 		ui.win_alpha:Get() / 100)
 end
 
+local function input_style()
+	local k = 1080 / screen().y
+	return string.format("x: %dpx; y: %dpx; width: 2px; height: 2px; opacity: 0.01;",
+		math.floor(state.win.x * k), math.floor((state.win.y + K.HEADER_H) * k))
+end
+
 local function apply_style()
 	if not panel_valid() then return end
 	local style = window_style()
@@ -834,9 +1040,21 @@ local function apply_style()
 		state.style = style
 		state.panel:SetStyle(style)
 	end
+	if state.input and state.input:IsValid() then
+		local istyle = input_style()
+		if istyle ~= state.input_style then
+			state.input_style = istyle
+			state.input:SetStyle(istyle)
+		end
+	end
 end
 
 local function destroy_panel()
+	if state.input_id then
+		input_js(K.JS_BLUR)
+		if state.input and state.input:IsValid() then disarm(state.input) end
+		input_js(K.JS_KILL)
+	end
 	if panel_valid() then
 		disarm(state.panel)
 		parent_js(K.JS_KILL)
@@ -844,6 +1062,9 @@ local function destroy_panel()
 	state.panel = nil
 	state.panel_id = nil
 	state.style = ""
+	state.input = nil
+	state.input_id = nil
+	state.input_style = ""
 end
 
 local function ensure_panel(url)
@@ -855,8 +1076,9 @@ local function ensure_panel(url)
 	state.parent, state.parent_id, state.parent_in_game = parent, parent_id, in_game
 	state.serial = state.serial + 1
 	local base = K.PANEL_ID .. state.serial
-	parent:SetAttribute("tt_report", "")
-	local sent = parent_js(string.format(K.JS_CREATE, base, url))
+	for _, attr in ipairs({ "tt_report", "tt_typed", "tt_pull", "tt_focus" }) do parent:SetAttribute(attr, "") end
+	state.typed, state.pulled, state.focus_ok, state.focus_report = "", false, false, ""
+	local sent = parent_js(string.format(K.JS_CREATE, base, url, js_str(K.PAGE_JS)))
 	local report = read_report()
 	log("create sent=" .. tostring(sent) .. " report: " .. (report ~= "" and report or "<empty>"))
 	local id = report:match("ok:(%S+)")
@@ -871,13 +1093,17 @@ local function ensure_panel(url)
 		return false
 	end
 	log("panel " .. id .. " type=" .. tostring(state.panel:GetPanelType()))
+	state.input_id = report:match("bridge:(%S+)")
+	state.input = state.input_id and parent:FindChildTraverse(state.input_id) or nil
+	log("text bridge " .. tostring(state.input_id) .. " lua=" .. tostring(state.input ~= nil))
 	state.style = ""
+	state.input_style = ""
 	apply_style()
 	return true
 end
 
 function act.open(url)
-	url = url or start_url()
+	url = url or K.URL_START
 	if not state.win then load_positions() end
 	clamp_positions()
 	if state.web_failed or not ensure_panel(url) then
@@ -896,8 +1122,9 @@ end
 
 function act.close()
 	focus_web(false)
+	local typed = state.parent and state.parent:IsValid() and state.parent:GetAttribute("tt_typed", "") or ""
+	if typed ~= "" then log("typed total " .. typed) end
 	destroy_panel()
-	state.web_focus = false
 	drop_hit("header")
 	drop_hit("grip")
 	set_zoom_lock(false)
@@ -981,11 +1208,34 @@ local function update_fade(mx, my)
 	end
 end
 
+local function over_menu(mx, my)
+	if not Menu.Opened() then return false end
+	local mp, ms = Menu.Pos(), Menu.Size()
+	return in_rect(mx, my, mp.x, mp.y, ms.x, ms.y)
+end
+
+local function typing_key(key)
+	local B = Enum.ButtonCode
+	return (key >= B.KEY_0 and key <= B.KEY_EQUAL) or key == B.KEY_SPACE or K.EDIT_KEYS[key] ~= nil
+end
+
+local function bind_hit(name, bind)
+	local none = Enum.ButtonCode.KEY_NONE
+	local pressed = bind:IsPressed()
+	local k1, k2 = bind:Buttons()
+	k1, k2 = k1 or none, k2 or none
+	local single = k1 ~= none and k2 == none
+	local down = single and Input.IsKeyDown(k1, true) or false
+	local rising = down and not state.bind_down[name]
+	state.bind_down[name] = down
+	if not (state.open and state.web_focus) then return pressed and not Input.IsInputCaptured() end
+	if typing_key(k1) or typing_key(k2) then return false end
+	if single then return rising end
+	return pressed
+end
+
 local function hit_test(mx, my)
-	if Menu.Opened() then
-		local mp, ms = Menu.Pos(), Menu.Size()
-		if in_rect(mx, my, mp.x, mp.y, ms.x, ms.y) then return nil end
-	end
+	if over_menu(mx, my) then return nil end
 	if state.open and state.win then
 		local r = header_rects()
 		if in_rect(mx, my, table.unpack(r.close)) then return "close" end
@@ -1111,19 +1361,19 @@ end
 local function draw()
 	ensure_assets()
 	if not state.icon then load_positions() end
+	local now = os.clock()
 	local mx, my = Input.GetCursorPos()
-	local down = Input.IsKeyDown(Enum.ButtonCode.KEY_MOUSE1)
+	local down = Input.IsKeyDown(Enum.ButtonCode.KEY_MOUSE1, true)
 	if down and not state.mouse_down then
 		local target = hit_test(mx, my)
 		if target then
 			on_press(target, mx, my)
-		elseif state.open and state.over_window then
-			focus_web(true)
-		else
+		elseif not (state.open and state.over_window) then
 			focus_web(false)
 		end
 	elseif not down and state.mouse_down then
 		on_release(mx, my)
+		state.focus_at = 0
 	end
 	state.mouse_down = down
 	update_drag(mx, my)
@@ -1140,7 +1390,8 @@ local function draw()
 	if shown then hud, hud_id = find_parent(Engine.IsInGame()) end
 	local size = ui.icon_size:Get()
 	sync_hit("icon", hud, hud_id, shown and { state.icon.x, state.icon.y, size, size } or nil)
-	state.over_window = r ~= nil and in_rect(mx, my, state.win.x, state.win.y, ui.win_w:Get(), K.HEADER_H + ui.win_h:Get())
+	state.over_window = r ~= nil and not over_menu(mx, my)
+		and in_rect(mx, my, state.win.x, state.win.y, ui.win_w:Get(), K.HEADER_H + ui.win_h:Get())
 	set_zoom_lock(state.over_window)
 	hold_camera()
 	if state.over_window ~= state.prev_over then
@@ -1153,6 +1404,11 @@ local function draw()
 			state.load_status = load
 			if load ~= "" then log("page " .. load) end
 		end
+		poll_edit_keys(now)
+		flush_edits()
+		keep_focus(now, down)
+		pull_text(now)
+		watch_typing()
 	end
 	if r then
 		apply_style()
@@ -1207,9 +1463,8 @@ function script.OnUpdateEx()
 		if state.open then act.close() end
 		return
 	end
-	if Input.IsInputCaptured() then return end
-	if ui.key:IsPressed() then act.toggle() end
-	if ui.hide_key:IsPressed() then
+	if bind_hit("key", ui.key) then act.toggle() end
+	if bind_hit("hide", ui.hide_key) then
 		state.icon_hidden = not state.icon_hidden
 		log("icon hidden=" .. tostring(state.icon_hidden))
 	end
@@ -1221,7 +1476,7 @@ function script.OnUpdate()
 end
 
 function script.OnKeyEvent(data)
-	if data.key ~= Enum.ButtonCode.KEY_MOUSE3 then return true end
+	if data.key ~= Enum.ButtonCode.KEY_MOUSE3 then return edit_key_event(data) end
 	if data.event == Enum.EKeyEvent.EKeyEvent_KEY_DOWN then
 		state.mouse3_blocked = state.over_window == true
 		if state.mouse3_blocked then log("middle click over window blocked") end
