@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.1",
+	VERSION = "1.2.2",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -685,6 +685,37 @@ local function log(text)
 	Log.Write("[TikTok] " .. text)
 end
 
+local cfg = { mem = {}, logged = false }
+
+function cfg.get(key, def)
+	local C = type(Config) == "table" and Config or {}
+	local reads = {
+		function() return C.ReadInt(K.CFG, key, def) end,
+		function() return C.ReadFloat(K.CFG, key, def) end,
+		function() return tonumber(C.ReadString(K.CFG, key, tostring(def))) end,
+	}
+	for _, read in ipairs(reads) do
+		local ok, v = pcall(read)
+		if ok and type(v) == "number" then return math.floor(v) end
+	end
+	if not cfg.logged then
+		cfg.logged = true
+		Log.Write("[TikTok] Config read unavailable, positions kept in memory")
+	end
+	local v = cfg.mem[key]
+	if v == nil then return def end
+	return v
+end
+
+function cfg.set(key, value)
+	value = math.floor(value)
+	cfg.mem[key] = value
+	local C = type(Config) == "table" and Config or {}
+	if pcall(function() C.WriteInt(K.CFG, key, value) end) then return end
+	if pcall(function() C.WriteFloat(K.CFG, key, value) end) then return end
+	pcall(function() C.WriteString(K.CFG, key, tostring(value)) end)
+end
+
 local function screen()
 	return Render.ScreenSize()
 end
@@ -700,12 +731,12 @@ end
 
 local function save_positions()
 	if state.icon then
-		Config.WriteInt(K.CFG, "icon_x", math.floor(state.icon.x))
-		Config.WriteInt(K.CFG, "icon_y", math.floor(state.icon.y))
+		cfg.set("icon_x", math.floor(state.icon.x))
+		cfg.set("icon_y", math.floor(state.icon.y))
 	end
 	if state.win then
-		Config.WriteInt(K.CFG, "win_x", math.floor(state.win.x))
-		Config.WriteInt(K.CFG, "win_y", math.floor(state.win.y))
+		cfg.set("win_x", math.floor(state.win.x))
+		cfg.set("win_y", math.floor(state.win.y))
 	end
 end
 
@@ -720,9 +751,9 @@ local function default_window()
 end
 
 local function load_positions()
-	local ix, iy = Config.ReadInt(K.CFG, "icon_x", -1), Config.ReadInt(K.CFG, "icon_y", -1)
+	local ix, iy = cfg.get("icon_x", -1), cfg.get("icon_y", -1)
 	state.icon = (ix >= 0 and iy >= 0) and { x = ix, y = iy } or default_icon()
-	local wx, wy = Config.ReadInt(K.CFG, "win_x", -1), Config.ReadInt(K.CFG, "win_y", -1)
+	local wx, wy = cfg.get("win_x", -1), cfg.get("win_y", -1)
 	state.win = (wx >= 0 and wy >= 0) and { x = wx, y = wy } or default_window()
 end
 
@@ -868,22 +899,22 @@ local function set_wheel_zoom(on)
 		end
 		if pick and pick ~= cur then
 			state.wheel_prev = cur
-			Config.WriteInt(K.CFG, "wheel_prev", cur)
+			cfg.set("wheel_prev", cur)
 			w:Set(pick)
 		end
 	elseif state.wheel_prev then
 		w:Set(state.wheel_prev)
 		state.wheel_prev = nil
-		Config.WriteInt(K.CFG, "wheel_prev", -1)
+		cfg.set("wheel_prev", -1)
 	end
 end
 
 local function restore_wheel_zoom()
-	local prev = Config.ReadInt(K.CFG, "wheel_prev", -1)
+	local prev = cfg.get("wheel_prev", -1)
 	if prev < 0 then return end
 	local w = umbrella_widget("zoom_wheel", K.WHEEL_PATH)
 	if w then w:Set(prev) end
-	Config.WriteInt(K.CFG, "wheel_prev", -1)
+	cfg.set("wheel_prev", -1)
 	log("umbrella zoom wheel restored to " .. prev)
 end
 
