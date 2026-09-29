@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.2",
+	VERSION = "1.2.3",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -490,13 +490,13 @@ var s=W.getSelection();if(!s||!s.modify)return;
 s.modify(sh?'extend':'move',fw?'forward':'backward',(a=='left'||a=='right')?(ct?'word':'character'):(a=='up'||a=='down')?'line':(ct?'documentboundary':'lineboundary'));
 })();}catch(x){r='err:'+x;}
 try{var w=window,dd=document,o=dd.title;w.__ttn=(w.__ttn||0)+1;if(w.__ttn<=6){if(o.indexOf('tt:')==0)o=w.__tto||'';else w.__tto=o;var mk='tt:'+a+':'+(r||'done');dd.title=mk;setTimeout(function(){if(dd.title==mk)dd.title=o;},600);}}catch(x){}})]==]
-K.JS_CREATE =[[var B='%s',U='%s',PAGE=%s;var types=['HTML','DOTAHTMLPanel','DOTAWebBrowser'];var info=[];var ok=null;
+K.JS_CREATE =[[var B='%s',U='%s',PAGE=%s,MENU=%d;var types=['HTML','DOTAHTMLPanel','DOTAWebBrowser'];var info=[];var ok=null;
 for(var i=0;i<types.length&&!ok;i++){var t=types[i],id=B+'_'+i,q=null;
 try{q=$.CreatePanel(t,par,id,{url:U,acceptsinput:'true',acceptsfocus:'true'});}catch(e){info.push(t+' props!'+e);try{q=$.CreatePanel(t,par,id);}catch(e2){info.push(t+'!'+e2);}}
 if(!q){info.push(t+' null');continue;}
 info.push(t+'>'+q.paneltype);
 if(q.paneltype==t){ok=q;info.unshift('ok:'+id);}else{q.DeleteAsync(0);}}
-if(ok){try{ok.SetIgnoreCursor(true);info.push('ignorecursor');}catch(e){info.push('SetIgnoreCursor!'+e);}
+if(ok){if(!MENU){try{ok.SetIgnoreCursor(true);info.push('ignorecursor');}catch(e){info.push('SetIgnoreCursor!'+e);}}
 par.SetAttributeString('tt_page',PAGE);
 var names=function(o){var s={};try{for(var k in o)s[k]=1;}catch(e){}try{var pr=Object.getPrototypeOf(o);while(pr&&pr!==Object.prototype){Object.getOwnPropertyNames(pr).forEach(function(n){s[n]=1;});pr=Object.getPrototypeOf(pr);}}catch(e){}return Object.keys(s).sort().join(',');};
 try{par.SetAttributeString('tt_methods',names(ok));}catch(e){par.SetAttributeString('tt_methods','!'+e);}
@@ -517,7 +517,7 @@ if(st==''&&t){setst('wait');$.Schedule(1,probe);}
 if(t.indexOf('Access Denied')<0&&t.indexOf('Error')!=0){if(u)tries=0;return;}if(pending||tries>=3)return;pending=true;tries++;$.Schedule(1+tries*2,function(){pending=false;if(ok.IsValid())ok.SetURL((tries&1)==1?'https://www.tiktok.com/':U);});};
 try{$.RegisterEventHandler('HTMLFinishRequest',ok,function(p,u,t){check(u,t);});$.RegisterEventHandler('HTMLTitle',ok,function(p,t){check('',t);});info.push('loadwatch');}catch(e){info.push('loadwatch!'+e);}
 var te=null;try{te=$.CreatePanel('TextEntry',par,B+'_in');}catch(e){info.push('bridge!'+e);}
-if(te){te.hittest=false;try{te.hittestchildren=false;}catch(e){}try{te.style.width='2px';te.style.height='2px';te.style.opacity='0.01';}catch(e){info.push('te_style!'+e);}
+if(te){te.hittest=false;try{te.hittestchildren=false;}catch(e){}try{te.style.width='2px';te.style.height='2px';te.style.opacity='0.01';if(MENU){te.style.x='-600px';te.style.y='-600px';info.push('bridge_off');}}catch(e){info.push('te_style!'+e);}
 try{te.SetMaxChars(4096);}catch(e){}try{te.RaiseChangeEvents(true);}catch(e){}
 var got=0,how='',sched=false;
 var take=function(src){if(!te.IsValid())return false;var s=te.text;if(s){te.text='';par.SetAttributeString('tt_pend',par.GetAttributeString('tt_pend','')+s);got+=s.length;if(how.indexOf(src)<0)how+=src;par.SetAttributeString('tt_typed',how+':'+got);}return true;};
@@ -1151,7 +1151,7 @@ local function ensure_panel(url)
 		parent:SetAttribute(attr, "")
 	end
 	state.typed, state.pulled, state.inject, state.feedback = "", false, "", ""
-	local sent = parent_js(string.format(K.JS_CREATE, base, url, js_str(K.PAGE_JS)))
+	local sent = parent_js(string.format(K.JS_CREATE, base, url, js_str(K.PAGE_JS), in_game and 0 or 1))
 	local report = read_report()
 	log("create sent=" .. tostring(sent) .. " report: " .. (report ~= "" and report or "<empty>"))
 	local id = report:match("ok:(%S+)")
