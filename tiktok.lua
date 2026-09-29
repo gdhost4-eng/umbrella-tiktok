@@ -389,7 +389,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.0.1",
+	VERSION = "1.0.2",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -405,6 +405,7 @@ local K = {
 	H_MIN = 400,
 	H_MAX = 1400,
 	ZOOM_CVAR = "dota_camera_disable_zoom",
+	CAM_PATH = { "Info Screen", "Main", "Camera", "Main", "Camera Settings", "Camera Distance" },
 	GRIP = 16,
 	DRAG_THRESHOLD = 4,
 	DEATH_INTERVAL = 0.2,
@@ -530,7 +531,8 @@ local state = {
 	zoom_missing = false,
 	over_window = false,
 	mouse3_blocked = false,
-	wheel_logged = false,
+	cam = nil,
+	cam_hold = nil,
 	load_status = "",
 	web_focus = false,
 }
@@ -687,9 +689,25 @@ local function sync_hit(name, parent, parent_id, rect)
 	end
 end
 
+local function cam_widget()
+	if state.cam == nil then
+		local ok, widget = pcall(Menu.Find, table.unpack(K.CAM_PATH))
+		state.cam = (ok and widget) or false
+		log("umbrella camera distance " .. (state.cam and "found" or "not found"))
+	end
+	return state.cam or nil
+end
+
+local function hold_camera()
+	local cam = state.cam_hold and cam_widget()
+	if cam and cam:Get() ~= state.cam_hold then cam:Set(state.cam_hold) end
+end
+
 local function set_zoom_lock(on)
 	if on == state.zoom_on then return end
 	state.zoom_on = on
+	local cam = cam_widget()
+	state.cam_hold = (on and cam) and cam:Get() or nil
 	local cv = ConVar.Find(K.ZOOM_CVAR)
 	if not cv then
 		if not state.zoom_missing then
@@ -1024,6 +1042,7 @@ local function draw()
 	sync_hit("icon", hud, hud_id, icon_visible() and { state.icon.x, state.icon.y, size, size } or nil)
 	state.over_window = r ~= nil and in_rect(mx, my, state.win.x, state.win.y, ui.win_w:Get(), K.HEADER_H + ui.win_h:Get())
 	set_zoom_lock(state.over_window)
+	hold_camera()
 	if r and state.parent and state.parent:IsValid() then
 		local load = state.parent:GetAttribute("tt_load", "") or ""
 		if load ~= state.load_status then
@@ -1098,15 +1117,6 @@ function script.OnUpdate()
 end
 
 function script.OnKeyEvent(data)
-	local wheel = data.key == Enum.ButtonCode.KEY_MWHEELUP or data.key == Enum.ButtonCode.KEY_MWHEELDOWN
-		or data.event == Enum.EKeyEvent.EKeyEvent_SCROLL_UP or data.event == Enum.EKeyEvent.EKeyEvent_SCROLL_DOWN
-	if wheel then
-		if state.over_window and not state.wheel_logged then
-			state.wheel_logged = true
-			log("wheel over window blocked for game")
-		end
-		return not state.over_window
-	end
 	if data.key ~= Enum.ButtonCode.KEY_MOUSE3 then return true end
 	if data.event == Enum.EKeyEvent.EKeyEvent_KEY_DOWN then
 		state.mouse3_blocked = state.over_window == true
