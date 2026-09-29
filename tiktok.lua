@@ -401,7 +401,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.5",
+	VERSION = "1.2.6",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -850,7 +850,7 @@ local function sync_hit(name, parent, parent_id, rect)
 	local ox, oy = origin(parent)
 	local x, y, w, h = table.unpack(rect)
 	x, y = x - ox, y - oy
-	local style = string.format("x: %dpx; y: %dpx; width: %dpx; height: %dpx;",
+	local style = string.format("x: %dpx; y: %dpx; width: %dpx; height: %dpx; transition-property: none; transition-duration: 0s;",
 		math.floor(x * k), math.floor(y * k), math.ceil(w * k), math.ceil(h * k))
 	if style ~= hp.style then
 		hp.style = style
@@ -1037,7 +1037,7 @@ local function window_style()
 	local s = screen()
 	local k = 1080 / s.y
 	local ox, oy = origin(state.parent)
-	return string.format("x: %dpx; y: %dpx; width: %dpx; height: %dpx; opacity: %.2f; background-color: #000000;",
+	return string.format("x: %dpx; y: %dpx; width: %dpx; height: %dpx; opacity: %.2f; background-color: #000000; transition-property: none; transition-duration: 0s; transition-delay: 0s;",
 		math.floor((state.win.x - ox) * k), math.floor((state.win.y + K.HEADER_H - oy) * k),
 		math.floor(ui.win_w:Get() * k), math.floor(ui.win_h:Get() * k),
 		ui.win_alpha:Get() / 100)
@@ -1046,7 +1046,7 @@ end
 local function input_style()
 	local k = 1080 / screen().y
 	local ox, oy = origin(state.parent)
-	return string.format("x: %dpx; y: %dpx; width: 2px; height: 2px; opacity: 0.01;",
+	return string.format("x: %dpx; y: %dpx; width: 2px; height: 2px; opacity: 0.01; transition-property: none; transition-duration: 0s;",
 		math.floor((state.win.x + 16 - ox) * k), math.floor((state.win.y + K.HEADER_H + ui.win_h:Get() + 8 - oy) * k))
 end
 
