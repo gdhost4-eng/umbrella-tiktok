@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.0",
+	VERSION = "1.2.1",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -439,9 +439,9 @@ K.JS_KILL = [[if(!p)return;if(p.SetURL)p.SetURL('about:blank');p.hittest=false;p
 K.JS_CLEAN = [[var ch=par.Children();for(var i=0;i<ch.length;i++){var id=ch[i].id||'';if(id.indexOf('TikTokWebPanel')==0||id.indexOf('TikTokHit')==0){if(ch[i].SetURL)ch[i].SetURL('about:blank');ch[i].hittest=false;ch[i].visible=false;ch[i].DeleteAsync(0);}}]]
 K.JS_FOCUS = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.SetAttributeString('tt_focus',(had?'kept':'set')+' key='+p.BHasKeyFocus());]]
 K.JS_BLUR = [[if(!p)return;if(p.BHasKeyFocus())$.DispatchEvent('DropInputFocus',p);]]
-K.JS_PULL = [[if(!p)return;var s=p.text;if(!s)return;p.text='';var h=par.FindChildTraverse('%s');if(!h||!h.RunJavascript)return;h.RunJavascript(par.GetAttributeString('tt_page','')+'("text",'+JSON.stringify(s)+',0)');par.SetAttributeString('tt_pull',''+s.length);]]
-K.JS_EDIT = [[if(!p||!p.RunJavascript)return;var P=par.GetAttributeString('tt_page','');var te=par.FindChildTraverse('%s');if(te&&te.text){var s=te.text;te.text='';p.RunJavascript(P+'("text",'+JSON.stringify(s)+',0)');}p.RunJavascript(P+'("%s","",%d)');]]
-K.PAGE_JS = [==[(function(a,t,m){try{
+K.JS_FOCUS_WEB = [[if(!p)return;var had=p.BHasKeyFocus();if(!had){var te=par.FindChildTraverse('%s');if(te){try{te.SetFocus();}catch(e){}}p.SetFocus();}par.SetAttributeString('tt_focus',(had?'kept':'set')+' web key='+p.BHasKeyFocus());]]
+K.JS_SEND = [[if(!p)return;var te=par.FindChildTraverse('%s');var s=par.GetAttributeString('tt_pend','');if(te&&te.text){s+=te.text;te.text='';par.SetAttributeString('tt_lpull','1');}par.SetAttributeString('tt_pend','');var a='%s',m=%d;if(!s&&!a)return;var P=par.GetAttributeString('tt_page',''),IM=par.GetAttributeString('tt_im','url');var q=function(x){return JSON.stringify(x).replace(/[\u007f-￿]/g,function(c){return '\\u'+('000'+c.charCodeAt(0).toString(16)).slice(-4);});};var c=(s?P+'("text",'+q(s)+',0);':'')+(a?P+'("'+a+'","",'+m+');':'');if(IM!='url'&&p[IM])p[IM](c);else p.SetURL('javascript:'+encodeURIComponent(c+'void '+(Date.now()+Math.random())));]]
+K.PAGE_JS = [==[(function(a,t,m){var r;try{r=(function(){
 var d=document,e=d.activeElement;
 try{while(e&&/^i?frame$/i.test(e.tagName)&&e.contentDocument){d=e.contentDocument;e=d.activeElement;}}catch(x){}
 while(e&&e.shadowRoot&&e.shadowRoot.activeElement)e=e.shadowRoot.activeElement;
@@ -459,11 +459,11 @@ function put(s,i,j){try{e.setRangeText(s,i,j,'end');e.dispatchEvent(new W.InputE
 function wl(v,i){var q=v.slice(0,i).search(/\S+\s*$/);return q<0?0:q;}
 function wr(v,i){var r=v.slice(i).match(/^\s*\S+/);return r?i+r[0].length:v.length;}
 if(a=='text'){
-if(ed){if(e.focus)e.focus();if(!cmd('insertText',t)&&tf)put(t,e.selectionStart,e.selectionEnd);return;}
+if(ed){if(e.focus)e.focus();if(cmd('insertText',t))return 'ins:'+tn;if(tf){put(t,e.selectionStart,e.selectionEnd);return 'rng:'+tn;}return 'fail:'+tn;}
 for(var n=0;n<t.length;n++){var ch=t.charAt(n);key(ch,ch.toUpperCase().charCodeAt(0),ch==' '?'Space':'',true);}
-return;}
+return 'keys:'+(tn||'none');}
 var KS={back:['Backspace',8],del:['Delete',46],enter:['Enter',13],left:['ArrowLeft',37],right:['ArrowRight',39],up:['ArrowUp',38],down:['ArrowDown',40],home:['Home',36],end:['End',35],pgup:['PageUp',33],pgdn:['PageDown',34],tab:['Tab',9],esc:['Escape',27],a:['a',65,'KeyA'],c:['c',67,'KeyC'],x:['x',88,'KeyX'],z:['z',90,'KeyZ'],y:['y',89,'KeyY']};
-var k=KS[a];if(!k||!key(k[0],k[1],k[2]||k[0],a=='enter'))return;
+var k=KS[a];if(!k)return 'nokey';if(!key(k[0],k[1],k[2]||k[0],a=='enter'))return 'prevented:'+tn;
 if(a=='c'){cmd('copy');return;}
 if(!ed||a=='pgup'||a=='pgdn'||a=='tab'||a=='esc')return;
 if(a=='x'){cmd('cut');return;}
@@ -488,7 +488,8 @@ if(sh)e.setSelectionRange(Math.min(an,p),Math.max(an,p),p<an?'backward':'forward
 return;}
 var s=W.getSelection();if(!s||!s.modify)return;
 s.modify(sh?'extend':'move',fw?'forward':'backward',(a=='left'||a=='right')?(ct?'word':'character'):(a=='up'||a=='down')?'line':(ct?'documentboundary':'lineboundary'));
-}catch(x){}})]==]
+})();}catch(x){r='err:'+x;}
+try{var w=window,dd=document,o=dd.title;w.__ttn=(w.__ttn||0)+1;if(w.__ttn<=6){if(o.indexOf('tt:')==0)o=w.__tto||'';else w.__tto=o;var mk='tt:'+a+':'+(r||'done');dd.title=mk;setTimeout(function(){if(dd.title==mk)dd.title=o;},600);}}catch(x){}})]==]
 K.JS_CREATE =[[var B='%s',U='%s',PAGE=%s;var types=['HTML','DOTAHTMLPanel','DOTAWebBrowser'];var info=[];var ok=null;
 for(var i=0;i<types.length&&!ok;i++){var t=types[i],id=B+'_'+i,q=null;
 try{q=$.CreatePanel(t,par,id,{url:U,acceptsinput:'true',acceptsfocus:'true'});}catch(e){info.push(t+' props!'+e);try{q=$.CreatePanel(t,par,id);}catch(e2){info.push(t+'!'+e2);}}
@@ -496,15 +497,34 @@ if(!q){info.push(t+' null');continue;}
 info.push(t+'>'+q.paneltype);
 if(q.paneltype==t){ok=q;info.unshift('ok:'+id);}else{q.DeleteAsync(0);}}
 if(ok){try{ok.SetIgnoreCursor(true);info.push('ignorecursor');}catch(e){info.push('SetIgnoreCursor!'+e);}
-var tries=0,pending=false;var check=function(u,t){t=t||'';par.SetAttributeString('tt_load',(u||'')+' | '+t+' | retry='+tries);if(t.indexOf('Access Denied')<0&&t.indexOf('Error')!=0){if(u)tries=0;return;}if(pending||tries>=3)return;pending=true;tries++;$.Schedule(1+tries*2,function(){pending=false;if(ok.IsValid())ok.SetURL((tries&1)==1?'https://www.tiktok.com/':U);});};
+par.SetAttributeString('tt_page',PAGE);
+var names=function(o){var s={};try{for(var k in o)s[k]=1;}catch(e){}try{var pr=Object.getPrototypeOf(o);while(pr&&pr!==Object.prototype){Object.getOwnPropertyNames(pr).forEach(function(n){s[n]=1;});pr=Object.getPrototypeOf(pr);}}catch(e){}return Object.keys(s).sort().join(',');};
+try{par.SetAttributeString('tt_methods',names(ok));}catch(e){par.SetAttributeString('tt_methods','!'+e);}
+var cands=['RunJavascript','RunJavaScript','ExecuteJavascript','ExecuteJavaScript','EvaluateJavascript','EvaluateJavaScript','ExecuteScript','RunScript'].filter(function(n){try{return typeof ok[n]=='function';}catch(e){return false;}});cands.push('url');info.push('inject='+cands.join('/'));
+var IM=cands[0],ci=0,tries2=0,bad=false,st='',real=U,nn=0;
+var setst=function(s){st=s;par.SetAttributeString('tt_im',IM);par.SetAttributeString('tt_inject',s);};
+var inj=function(c){if(!ok.IsValid())return;if(IM!='url')ok[IM](c);else ok.SetURL('javascript:'+encodeURIComponent(c+';void '+(++nn)));};
+var PROBE="(function(){var d=document,o=d.title;d.title='tt:probe';setTimeout(function(){if(d.title=='tt:probe')d.title=o;},600);})()";
+var probe=function(){if(st=='ok'||!ok.IsValid())return;if(ci>=cands.length){setst('fail');return;}IM=cands[ci];setst('probe:'+IM);try{inj(PROBE);}catch(e){par.SetAttributeString('tt_fb','probe!'+IM+' '+e);bad=true;}$.Schedule(2.5,function(){if(st=='ok')return;if(bad||++tries2>=2){tries2=0;ci++;bad=false;}probe();});};
+var fb=function(t){par.SetAttributeString('tt_fb',t);if(st!='ok')setst('ok');};
+var tries=0,pending=false;var check=function(u,t){u=u||'';t=t||'';
+if(t.indexOf('tt:')==0){fb(t);return;}
+if(u.indexOf('javascript:')==0)return;
+if(u.indexOf('javascript')>=0||t.indexOf('javascript:')==0){if(st!='ok'){bad=true;par.SetAttributeString('tt_fb','broken:'+IM);ok.SetURL(real);}return;}
+if(u.indexOf('http')==0){real=u;par.SetAttributeString('tt_url',u);}
+par.SetAttributeString('tt_load',u+' | '+t+' | retry='+tries);
+if(st==''&&t){setst('wait');$.Schedule(1,probe);}
+if(t.indexOf('Access Denied')<0&&t.indexOf('Error')!=0){if(u)tries=0;return;}if(pending||tries>=3)return;pending=true;tries++;$.Schedule(1+tries*2,function(){pending=false;if(ok.IsValid())ok.SetURL((tries&1)==1?'https://www.tiktok.com/':U);});};
 try{$.RegisterEventHandler('HTMLFinishRequest',ok,function(p,u,t){check(u,t);});$.RegisterEventHandler('HTMLTitle',ok,function(p,t){check('',t);});info.push('loadwatch');}catch(e){info.push('loadwatch!'+e);}
-info.push('rj='+(typeof ok.RunJavascript));par.SetAttributeString('tt_page',PAGE);
 var te=null;try{te=$.CreatePanel('TextEntry',par,B+'_in');}catch(e){info.push('bridge!'+e);}
 if(te){te.hittest=false;try{te.hittestchildren=false;}catch(e){}try{te.style.width='2px';te.style.height='2px';te.style.opacity='0.01';}catch(e){info.push('te_style!'+e);}
 try{te.SetMaxChars(4096);}catch(e){}try{te.RaiseChangeEvents(true);}catch(e){}
-var sent=0,how='';var fwd=function(src){if(!te.IsValid())return false;var s=te.text;if(!s)return true;te.text='';if(!ok.IsValid()||!ok.RunJavascript)return true;ok.RunJavascript(PAGE+'("text",'+JSON.stringify(s)+',0)');sent+=s.length;if(how.indexOf(src)<0)how+=src;par.SetAttributeString('tt_typed',how+':'+sent);return true;};
-try{$.RegisterEventHandler('TextEntryChanged',te,function(){fwd('E');});}catch(e){info.push('te_event!'+e);}
-var loop=function(){if(fwd('P'))$.Schedule(0.03,loop);};$.Schedule(0.03,loop);
+var got=0,how='',sched=false;
+var take=function(src){if(!te.IsValid())return false;var s=te.text;if(s){te.text='';par.SetAttributeString('tt_pend',par.GetAttributeString('tt_pend','')+s);got+=s.length;if(how.indexOf(src)<0)how+=src;par.SetAttributeString('tt_typed',how+':'+got);}return true;};
+var q=function(x){return JSON.stringify(x).replace(/[\u007f-￿]/g,function(c){return '\\u'+('000'+c.charCodeAt(0).toString(16)).slice(-4);});};
+var flush=function(){sched=false;if(st!='ok'||!ok.IsValid())return;var s=par.GetAttributeString('tt_pend','');if(!s)return;par.SetAttributeString('tt_pend','');inj(PAGE+'("text",'+q(s)+',0)');};
+try{$.RegisterEventHandler('TextEntryChanged',te,function(){take('E');if(!sched){sched=true;$.Schedule(0,flush);}});}catch(e){info.push('te_event!'+e);}
+var loop=function(){if(!take('P'))return;flush();$.Schedule(0.03,loop);};$.Schedule(0.03,loop);
 info.push('bridge:'+te.id);}
 try{if(ok.SetURL)ok.SetURL(U);}catch(e){info.push('SetURL!'+e);}}
 par.SetAttributeString('tt_report',info.join(' | '));]]
@@ -651,11 +671,13 @@ local state = {
 	edit_logged = {},
 	key_events = false,
 	focus_at = 0,
-	focus_report = "",
-	focus_ok = false,
+	focus_seen = {},
 	pull_at = 0,
 	typed = "",
 	pulled = false,
+	inject = "",
+	feedback = "",
+	methods_logged = false,
 	bind_down = {},
 }
 
@@ -904,41 +926,59 @@ local function focus_web(on)
 	state.keys = {}
 	state.edit_queue = {}
 	if not on then
-		if state.input_id then input_js(K.JS_BLUR) else parent_js(K.JS_BLUR) end
+		input_js(K.JS_BLUR)
+		parent_js(K.JS_BLUR)
 	end
 	log("web focus " .. tostring(on))
+end
+
+local function bridge_ready()
+	return state.inject == "ok" and state.input_id ~= nil
 end
 
 local function keep_focus(now, mouse_down)
 	if not (state.web_focus and panel_valid()) or mouse_down or now < state.focus_at then return end
 	state.focus_at = now + K.FOCUS_INTERVAL
-	if state.input_id then input_js(K.JS_FOCUS) else parent_js(K.JS_FOCUS) end
-	local report = state.parent:GetAttribute("tt_focus", "") or ""
-	if report:find("key=false", 1, true) then
-		if report ~= state.focus_report then log("input focus failed: " .. report) end
-	elseif not state.focus_ok and report ~= "" then
-		state.focus_ok = true
-		log("input focus " .. report)
+	if bridge_ready() then
+		input_js(K.JS_FOCUS)
+	else
+		parent_js(string.format(K.JS_FOCUS_WEB, state.input_id or ""))
 	end
-	state.focus_report = report
+	local report = state.parent:GetAttribute("tt_focus", "") or ""
+	if report ~= "" and not state.focus_seen[report] then
+		state.focus_seen[report] = true
+		log("focus " .. report)
+	end
 end
 
 local function pull_text(now)
-	if not state.input_id or state.typed:find("E", 1, true) or now < state.pull_at then return end
+	if not bridge_ready() or state.typed ~= "" or now < state.pull_at then return end
 	state.pull_at = now + K.PULL_INTERVAL
-	input_js(string.format(K.JS_PULL, state.panel_id))
+	parent_js(string.format(K.JS_SEND, state.input_id, "", 0))
 end
 
-local function watch_typing()
-	local typed = state.parent:GetAttribute("tt_typed", "") or ""
+local function watch_bridge()
+	local attr = function(name) return state.parent:GetAttribute(name, "") or "" end
+	local inject = attr("tt_inject")
+	if inject ~= state.inject then
+		state.inject = inject
+		state.focus_at = 0
+		log("page script " .. inject .. " via " .. attr("tt_im"))
+	end
+	local feedback = attr("tt_fb")
+	if feedback ~= state.feedback then
+		state.feedback = feedback
+		log("page feedback " .. feedback)
+	end
+	local typed = attr("tt_typed")
 	local how = typed:match("^(%a+):") or ""
 	if how ~= state.typed then
 		state.typed = how
-		log("typing forwarded " .. typed)
+		log("text entry got " .. typed)
 	end
-	if not state.pulled and (state.parent:GetAttribute("tt_pull", "") or "") ~= "" then
+	if not state.pulled and attr("tt_lpull") ~= "" then
 		state.pulled = true
-		log("typing forwarded by lua pull")
+		log("text entry read by lua")
 	end
 end
 
@@ -979,7 +1019,7 @@ local function poll_edit_keys(now)
 				h.next = now + K.REPEAT_RATE
 				state.edit_queue[#state.edit_queue + 1] = { h.action, h.mods }
 			end
-		elseif rising and state.web_focus and state.input_id and not state.key_events then
+		elseif rising and state.web_focus and bridge_ready() and not state.key_events then
 			local action = edit_action(key)
 			if action then press_edit(key, action, "poll") end
 		end
@@ -992,7 +1032,7 @@ local function flush_edits()
 	state.edit_queue = {}
 	if not panel_valid() then return end
 	for _, item in ipairs(queue) do
-		parent_js(string.format(K.JS_EDIT, state.input_id or "", item[1], item[2]))
+		parent_js(string.format(K.JS_SEND, state.input_id or "", item[1], item[2]))
 	end
 end
 
@@ -1003,7 +1043,7 @@ local function edit_key_event(data)
 		state.keys[data.key] = nil
 		return false
 	end
-	if data.event ~= Enum.EKeyEvent.EKeyEvent_KEY_DOWN or not (state.open and state.web_focus and state.input_id) then return true end
+	if data.event ~= Enum.EKeyEvent.EKeyEvent_KEY_DOWN or not (state.open and state.web_focus and bridge_ready()) then return true end
 	local action = held and held.action or edit_action(data.key)
 	if not action then return true end
 	state.key_events = true
@@ -1076,8 +1116,10 @@ local function ensure_panel(url)
 	state.parent, state.parent_id, state.parent_in_game = parent, parent_id, in_game
 	state.serial = state.serial + 1
 	local base = K.PANEL_ID .. state.serial
-	for _, attr in ipairs({ "tt_report", "tt_typed", "tt_pull", "tt_focus" }) do parent:SetAttribute(attr, "") end
-	state.typed, state.pulled, state.focus_ok, state.focus_report = "", false, false, ""
+	for _, attr in ipairs({ "tt_report", "tt_typed", "tt_lpull", "tt_focus", "tt_inject", "tt_im", "tt_fb", "tt_methods", "tt_url", "tt_pend" }) do
+		parent:SetAttribute(attr, "")
+	end
+	state.typed, state.pulled, state.inject, state.feedback = "", false, "", ""
 	local sent = parent_js(string.format(K.JS_CREATE, base, url, js_str(K.PAGE_JS)))
 	local report = read_report()
 	log("create sent=" .. tostring(sent) .. " report: " .. (report ~= "" and report or "<empty>"))
@@ -1096,6 +1138,10 @@ local function ensure_panel(url)
 	state.input_id = report:match("bridge:(%S+)")
 	state.input = state.input_id and parent:FindChildTraverse(state.input_id) or nil
 	log("text bridge " .. tostring(state.input_id) .. " lua=" .. tostring(state.input ~= nil))
+	if not state.methods_logged then
+		state.methods_logged = true
+		log("html methods: " .. (parent:GetAttribute("tt_methods", "") or ""))
+	end
 	state.style = ""
 	state.input_style = ""
 	apply_style()
@@ -1140,7 +1186,7 @@ end
 
 function act.reload()
 	if panel_valid() then
-		parent_js("if(!p)return;if(p.Reload){p.Reload();}else if(p.SetURL){p.SetURL(p.GetAttributeString('url',''));}")
+		parent_js("if(!p)return;var u=par.GetAttributeString('tt_url','')||p.GetAttributeString('url','');if(p.Reload){p.Reload();}else if(p.SetURL&&u){p.SetURL(u);}")
 		log("reload")
 	end
 end
@@ -1406,9 +1452,9 @@ local function draw()
 		end
 		poll_edit_keys(now)
 		flush_edits()
+		watch_bridge()
 		keep_focus(now, down)
 		pull_text(now)
-		watch_typing()
 	end
 	if r then
 		apply_style()
