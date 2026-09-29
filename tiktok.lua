@@ -401,7 +401,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.6",
+	VERSION = "1.2.7",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -443,6 +443,7 @@ K.LOGO_SVG = string.format([[<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1
 </svg>]], K.LOGO_PATH, K.LOGO_PATH, K.LOGO_PATH)
 K.JS_WRAP = [[(function(){var PID='%s',ID='%s';var c=$.GetContextPanel();var r=c;while(r.GetParent())r=r.GetParent();var par=(c.id==PID)?c:((r.id==PID)?r:r.FindChildTraverse(PID));if(!par){$.Msg('[TikTok] parent not found');return;}var p=ID?par.FindChildTraverse(ID):null;%s})()]]
 K.HIDDEN_STYLE = "x: -9999px; y: -9999px; width: 0px; height: 0px; visibility: collapse;"
+K.JS_KIDS = [[if(!p)return;$.Schedule(2,function(){if(!p.IsValid())return;var out=[];var walk=function(q,d){var n=q.GetChildCount();for(var i=0;i<n;i++){var c=q.GetChild(i);if(!c)continue;out.push(d+':'+c.paneltype+'#'+(c.id||'')+' '+c.actuallayoutwidth+'x'+c.actuallayoutheight+' vis='+c.visible);walk(c,d+1);c.visible=false;}};walk(p,0);par.SetAttributeString('tt_kids',out.length?out.join(' ; '):'none');});]]
 K.JS_KILL = [[if(!p)return;if(p.SetURL)p.SetURL('about:blank');p.hittest=false;p.visible=false;p.DeleteAsync(0);]]
 K.JS_CLEAN = [[var ch=par.Children();for(var i=0;i<ch.length;i++){var id=ch[i].id||'';if(id.indexOf('TikTokWebPanel')==0||id.indexOf('TikTokHit')==0){if(ch[i].SetURL)ch[i].SetURL('about:blank');ch[i].hittest=false;ch[i].visible=false;ch[i].DeleteAsync(0);}}]]
 K.JS_FOCUS = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.SetAttributeString('tt_focus',(had?'kept':'set')+' bar key='+p.BHasKeyFocus());]]
@@ -647,6 +648,7 @@ local state = {
 	bar_font = nil,
 	bind_down = {},
 	origin_x = 0,
+	kids_logged = true,
 	origin_y = 0,
 }
 
@@ -1138,6 +1140,11 @@ function act.open(url)
 	drop_hit("grip")
 	drop_hit("bar")
 	state.open = true
+	state.kids_logged = false
+	if not state.parent_in_game then
+		state.parent:SetAttribute("tt_kids", "")
+		parent_js(K.JS_KIDS)
+	end
 	log("window open " .. url)
 end
 
@@ -1491,6 +1498,13 @@ local function draw()
 		if load ~= state.load_status then
 			state.load_status = load
 			if load ~= "" then log("page " .. load) end
+		end
+		if not state.kids_logged then
+			local kids = state.parent:GetAttribute("tt_kids", "") or ""
+			if kids ~= "" then
+				state.kids_logged = true
+				log("menu web children hidden: " .. kids)
+			end
 		end
 		watch_page(now)
 		send_bar()
