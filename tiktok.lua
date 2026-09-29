@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.3",
+	VERSION = "1.2.4",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -679,6 +679,8 @@ local state = {
 	feedback = "",
 	methods_logged = false,
 	bind_down = {},
+	origin_x = 0,
+	origin_y = 0,
 }
 
 local function log(text)
@@ -790,6 +792,17 @@ local function find_parent(in_game)
 	if cached and cached.panel:IsValid() then return cached.panel, cached.id end
 	for _, name in ipairs(in_game and K.HUD_PARENTS or K.MENU_PARENTS) do
 		local p = Panorama.GetPanelByName(name, false)
+		if p and p:IsValid() and not in_game then
+			local root = p
+			while true do
+				local up = root:GetParent()
+				if not (up and up:IsValid()) then break end
+				root = up
+			end
+			local rid = root:GetID() or ""
+			log("menu root " .. (rid ~= "" and rid or "<no id>") .. " from " .. name)
+			if root ~= p and rid ~= "" then p, name = root, rid end
+		end
 		if p and p:IsValid() then
 			log("parent " .. name)
 			state.parents[in_game] = { panel = p, id = name }
@@ -830,6 +843,18 @@ local function drop_hit(name)
 	end
 end
 
+local function origin(parent)
+	if Engine.IsInGame() or not (parent and parent:IsValid()) then return 0, 0 end
+	local ok, pos = pcall(parent.GetPositionWithinWindow, parent)
+	if not ok or not pos then return 0, 0 end
+	local ox, oy = math.floor(pos.x), math.floor(pos.y)
+	if ox ~= state.origin_x or oy ~= state.origin_y then
+		state.origin_x, state.origin_y = ox, oy
+		log(string.format("menu parent origin %d,%d", ox, oy))
+	end
+	return ox, oy
+end
+
 local function sync_hit(name, parent, parent_id, rect)
 	local hp = state.hits[name]
 	if hp and not (hp.panel:IsValid() and hp.parent == parent) then
@@ -855,7 +880,9 @@ local function sync_hit(name, parent, parent_id, rect)
 		log("hit panel " .. id)
 	end
 	local k = 1080 / screen().y
+	local ox, oy = origin(parent)
 	local x, y, w, h = table.unpack(rect)
+	x, y = x - ox, y - oy
 	local style = string.format("x: %dpx; y: %dpx; width: %dpx; height: %dpx;",
 		math.floor(x * k), math.floor(y * k), math.ceil(w * k), math.ceil(h * k))
 	if style ~= hp.style then
@@ -1092,16 +1119,18 @@ end
 local function window_style()
 	local s = screen()
 	local k = 1080 / s.y
+	local ox, oy = origin(state.parent)
 	return string.format("x: %dpx; y: %dpx; width: %dpx; height: %dpx; opacity: %.2f; background-color: #000000;",
-		math.floor(state.win.x * k), math.floor((state.win.y + K.HEADER_H) * k),
+		math.floor((state.win.x - ox) * k), math.floor((state.win.y + K.HEADER_H - oy) * k),
 		math.floor(ui.win_w:Get() * k), math.floor(ui.win_h:Get() * k),
 		ui.win_alpha:Get() / 100)
 end
 
 local function input_style()
 	local k = 1080 / screen().y
+	local ox, oy = origin(state.parent)
 	return string.format("x: %dpx; y: %dpx; width: 2px; height: 2px; opacity: 0.01;",
-		math.floor(state.win.x * k), math.floor((state.win.y + K.HEADER_H) * k))
+		math.floor((state.win.x - ox) * k), math.floor((state.win.y + K.HEADER_H - oy) * k))
 end
 
 local function apply_style()
@@ -1458,6 +1487,11 @@ local function draw()
 		log("panel lost")
 		act.close()
 	end
+	if state.open and state.parent_in_game ~= Engine.IsInGame() then
+		local url = state.parent and state.parent:IsValid() and state.parent:GetAttribute("tt_url", "") or ""
+		log("move window to " .. (Engine.IsInGame() and "game" or "menu") .. " " .. url)
+		act.open(url ~= "" and url or nil)
+	end
 	local r = state.open and header_rects() or nil
 	sync_hit("header", state.parent, state.parent_id, r and r.header)
 	sync_hit("grip", state.parent, state.parent_id, r and r.grip)
@@ -1566,7 +1600,7 @@ function script.OnKeyEvent(data)
 end
 
 function script.OnGameEnd()
-	act.close()
+	if ui.scope:Get() ~= 1 then act.close() end
 	drop_hit("icon")
 	state.alive, state.death_at, state.parent_in_game = nil, nil, nil
 end
