@@ -321,7 +321,11 @@ local localization = qLocalization.new({
 		tt_group_main = "Main",
 		tt_group_window = "Window",
 		tt_enable = "Enable",
-		tt_enable_tip = "Shows the TikTok icon during the match",
+		tt_enable_tip = "Shows the TikTok icon and window",
+		tt_scope = "Works",
+		tt_scope_tip = "In the main menu the window opens by key or icon",
+		tt_scope_match = "Only in match",
+		tt_scope_all = "In match and menu",
 		tt_key = "Open window",
 		tt_key_tip = "Opens and closes the TikTok window",
 		tt_bind_name = "TikTok",
@@ -330,6 +334,9 @@ local localization = qLocalization.new({
 		tt_gear_icon = "Icon",
 		tt_icon_size = "Size",
 		tt_icon_alpha = "Opacity",
+		tt_icon_reveal = "Reveal near cursor",
+		tt_icon_reveal_tip = "The icon is hidden and fades in as the cursor gets closer",
+		tt_icon_radius = "Reveal radius",
 		tt_hide_key = "Hide icon",
 		tt_hide_key_tip = "Hides and shows the icon",
 		tt_icon_reset = "Reset position",
@@ -354,7 +361,11 @@ local localization = qLocalization.new({
 		tt_group_main = "Основное",
 		tt_group_window = "Окно",
 		tt_enable = "Включить",
-		tt_enable_tip = "Показывает значок TikTok в матче",
+		tt_enable_tip = "Показывает значок и окно TikTok",
+		tt_scope = "Работает",
+		tt_scope_tip = "В главном меню окно открывается клавишей или значком",
+		tt_scope_match = "Только в матче",
+		tt_scope_all = "В матче и в меню",
 		tt_key = "Открыть окно",
 		tt_key_tip = "Открывает и закрывает окно TikTok",
 		tt_bind_name = "TikTok",
@@ -363,6 +374,9 @@ local localization = qLocalization.new({
 		tt_gear_icon = "Значок",
 		tt_icon_size = "Размер",
 		tt_icon_alpha = "Прозрачность",
+		tt_icon_reveal = "Проявлять у курсора",
+		tt_icon_reveal_tip = "Значок скрыт и проявляется, когда к нему подводишь курсор",
+		tt_icon_radius = "Радиус проявления",
 		tt_hide_key = "Скрыть значок",
 		tt_hide_key_tip = "Прячет и возвращает значок",
 		tt_icon_reset = "Сбросить позицию",
@@ -389,7 +403,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.0.3",
+	VERSION = "1.1.0",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -455,6 +469,10 @@ do
 	ui.enable = g_main:Switch("tt_enable", false, "\u{f011}")
 	ui.enable:ToolTip("tt_enable_tip")
 
+	ui.scope = g_main:Combo("tt_scope", { "tt_scope_match", "tt_scope_all" }, 0)
+	ui.scope:Icon("\u{f0ac}")
+	ui.scope:ToolTip("tt_scope_tip")
+
 	ui.key = g_main:Bind("tt_key", Enum.ButtonCode.KEY_NONE, "\u{f11c}")
 	ui.key:ToolTip("tt_key_tip")
 
@@ -465,6 +483,10 @@ do
 	ui.icon_size:Icon("\u{f065}")
 	ui.icon_alpha = g_icon:Slider("tt_icon_alpha", 10, 100, 100, "%d%%")
 	ui.icon_alpha:Icon("\u{f042}")
+	ui.icon_reveal = g_icon:Switch("tt_icon_reveal", false, "\u{f245}")
+	ui.icon_reveal:ToolTip("tt_icon_reveal_tip")
+	ui.icon_radius = g_icon:Slider("tt_icon_radius", 40, 800, 220, "%d px")
+	ui.icon_radius:Icon("\u{f192}")
 	ui.hide_key = g_icon:Bind("tt_hide_key", Enum.ButtonCode.KEY_NONE, "\u{f070}")
 	ui.hide_key:ToolTip("tt_hide_key_tip")
 	ui.icon_reset = g_icon:Button("tt_icon_reset", function() act.reset_icon() end)
@@ -495,12 +517,13 @@ end
 
 local function refresh_disabled()
 	local on = ui.enable:Get()
-	for _, w in ipairs({ ui.key, ui.icon, ui.auto_death, ui.win_w, ui.win_h, ui.win_alpha, ui.start_page }) do
+	for _, w in ipairs({ ui.scope, ui.key, ui.icon, ui.auto_death, ui.win_w, ui.win_h, ui.win_alpha, ui.start_page }) do
 		w:Disabled(not on)
 	end
 end
 
 ui.enable:SetCallback(refresh_disabled, true)
+ui.icon_reveal:SetCallback(function(w) ui.icon_radius:Visible(w:Get()) end, true)
 
 local state = {
 	panel = nil,
@@ -540,6 +563,8 @@ local state = {
 	cam_hold = nil,
 	load_status = "",
 	web_focus = false,
+	fade = 0,
+	fade_clock = nil,
 }
 
 local function log(text)
@@ -925,8 +950,35 @@ local function header_rects()
 	}
 end
 
+local function allowed()
+	return ui.scope:Get() == 1 or Engine.IsInGame()
+end
+
 local function icon_visible()
-	return ui.icon:Get() and not state.icon_hidden and Engine.IsInGame()
+	return ui.icon:Get() and not state.icon_hidden and allowed()
+end
+
+local function reveal_target(mx, my)
+	if not ui.icon_reveal:Get() or state.open or (state.press and state.press.target == "icon") then return 1 end
+	local size = ui.icon_size:Get()
+	local x, y = state.icon.x, state.icon.y
+	local dx = math.max(x - mx, 0, mx - (x + size))
+	local dy = math.max(y - my, 0, my - (y + size))
+	local t = clamp(1 - math.sqrt(dx * dx + dy * dy) / ui.icon_radius:Get(), 0, 1)
+	return t * t * (3 - 2 * t)
+end
+
+local function update_fade(mx, my)
+	local now = os.clock()
+	local dt = state.fade_clock and clamp(now - state.fade_clock, 0, 0.1) or 0
+	state.fade_clock = now
+	local target = icon_visible() and reveal_target(mx, my) or 0
+	local step = dt * 6
+	if math.abs(target - state.fade) <= step then
+		state.fade = target
+	else
+		state.fade = state.fade + (target > state.fade and step or -step)
+	end
 end
 
 local function hit_test(mx, my)
@@ -942,7 +994,7 @@ local function hit_test(mx, my)
 		if in_rect(mx, my, table.unpack(r.header)) then return "header" end
 		if in_rect(mx, my, table.unpack(r.grip)) then return "grip" end
 	end
-	if icon_visible() and state.icon then
+	if icon_visible() and state.icon and state.fade > 0.05 then
 		local size = ui.icon_size:Get()
 		if in_rect(mx, my, state.icon.x, state.icon.y, size, size) then return "icon" end
 	end
@@ -1048,7 +1100,7 @@ end
 local function draw_icon(mx, my)
 	local size = ui.icon_size:Get()
 	local x, y = state.icon.x, state.icon.y
-	local a = ui.icon_alpha:Get() / 100
+	local a = ui.icon_alpha:Get() / 100 * state.fade
 	local hovered = in_rect(mx, my, x, y, size, size) or (state.press and state.press.target == "icon")
 	local bg_a = math.floor((hovered and 245 or 225) * a)
 	Render.FilledRect(Vec2(x, y), Vec2(x + size, y + size), Color(12, 12, 14, bg_a), size * 0.26)
@@ -1082,10 +1134,12 @@ local function draw()
 	local r = state.open and header_rects() or nil
 	sync_hit("header", state.parent, state.parent_id, r and r.header)
 	sync_hit("grip", state.parent, state.parent_id, r and r.grip)
+	update_fade(mx, my)
+	local shown = icon_visible() and state.fade > 0.05
 	local hud, hud_id = nil, nil
-	if Engine.IsInGame() then hud, hud_id = find_parent(true) end
+	if shown then hud, hud_id = find_parent(Engine.IsInGame()) end
 	local size = ui.icon_size:Get()
-	sync_hit("icon", hud, hud_id, icon_visible() and { state.icon.x, state.icon.y, size, size } or nil)
+	sync_hit("icon", hud, hud_id, shown and { state.icon.x, state.icon.y, size, size } or nil)
 	state.over_window = r ~= nil and in_rect(mx, my, state.win.x, state.win.y, ui.win_w:Get(), K.HEADER_H + ui.win_h:Get())
 	set_zoom_lock(state.over_window)
 	hold_camera()
@@ -1104,7 +1158,7 @@ local function draw()
 		apply_style()
 		draw_window(mx, my)
 	end
-	if icon_visible() then draw_icon(mx, my) end
+	if shown then draw_icon(mx, my) end
 end
 
 local function update_death()
@@ -1149,7 +1203,7 @@ function script.OnFrame()
 end
 
 function script.OnUpdateEx()
-	if not ui.enable:Get() then
+	if not ui.enable:Get() or not allowed() then
 		if state.open then act.close() end
 		return
 	end
@@ -1189,8 +1243,9 @@ function script.OnScriptsLoaded()
 	load_positions()
 	restore_wheel_zoom()
 	local s = screen()
-	log(string.format("v%s loaded, enabled=%s, screen=%dx%d, in_game=%s",
-		K.VERSION, tostring(ui.enable:Get()), math.floor(s.x), math.floor(s.y), tostring(Engine.IsInGame())))
+	log(string.format("v%s loaded, enabled=%s, scope=%d, reveal=%s, screen=%dx%d, in_game=%s",
+		K.VERSION, tostring(ui.enable:Get()), ui.scope:Get(), tostring(ui.icon_reveal:Get()),
+		math.floor(s.x), math.floor(s.y), tostring(Engine.IsInGame())))
 end
 
 return script
