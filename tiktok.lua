@@ -389,7 +389,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.0.2",
+	VERSION = "1.0.3",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -406,6 +406,8 @@ local K = {
 	H_MAX = 1400,
 	ZOOM_CVAR = "dota_camera_disable_zoom",
 	CAM_PATH = { "Info Screen", "Main", "Camera", "Main", "Camera Settings", "Camera Distance" },
+	WHEEL_PATH = { "Info Screen", "Main", "Camera", "Main", "Camera Settings", "Zoom using Wheel" },
+	WHEEL_OFF = { "none", "off", "disable", "never", "нет", "выкл", "ctrl", "alt", "shift" },
 	GRIP = 16,
 	DRAG_THRESHOLD = 4,
 	DEATH_INTERVAL = 0.2,
@@ -531,7 +533,10 @@ local state = {
 	zoom_missing = false,
 	over_window = false,
 	mouse3_blocked = false,
-	cam = nil,
+	found = {},
+	wheel_prev = nil,
+	wheel_list_logged = false,
+	prev_over = false,
 	cam_hold = nil,
 	load_status = "",
 	web_focus = false,
@@ -689,24 +694,65 @@ local function sync_hit(name, parent, parent_id, rect)
 	end
 end
 
-local function cam_widget()
-	if state.cam == nil then
-		local ok, widget = pcall(Menu.Find, table.unpack(K.CAM_PATH))
-		state.cam = (ok and widget) or false
-		log("umbrella camera distance " .. (state.cam and "found" or "not found"))
+local function umbrella_widget(name, path)
+	if state.found[name] == nil then
+		local ok, widget = pcall(Menu.Find, table.unpack(path))
+		state.found[name] = (ok and widget) or false
+		log("umbrella " .. name .. " " .. (state.found[name] and "found" or "not found"))
 	end
-	return state.cam or nil
+	return state.found[name] or nil
+end
+
+local function pick_wheel_off(list)
+	for _, pattern in ipairs(K.WHEEL_OFF) do
+		for i, item in ipairs(list) do
+			if tostring(item):lower():find(pattern) then return i - 1 end
+		end
+	end
+	return nil
+end
+
+local function set_wheel_zoom(on)
+	local w = umbrella_widget("zoom_wheel", K.WHEEL_PATH)
+	if not w then return end
+	if on then
+		local list = w:List() or {}
+		local cur, pick = w:Get(), pick_wheel_off(list)
+		if not state.wheel_list_logged then
+			state.wheel_list_logged = true
+			log("umbrella zoom wheel items: " .. table.concat(list, ", ") .. " current=" .. tostring(cur) .. " pick=" .. tostring(pick))
+		end
+		if pick and pick ~= cur then
+			state.wheel_prev = cur
+			Config.WriteInt(K.CFG, "wheel_prev", cur)
+			w:Set(pick)
+		end
+	elseif state.wheel_prev then
+		w:Set(state.wheel_prev)
+		state.wheel_prev = nil
+		Config.WriteInt(K.CFG, "wheel_prev", -1)
+	end
+end
+
+local function restore_wheel_zoom()
+	local prev = Config.ReadInt(K.CFG, "wheel_prev", -1)
+	if prev < 0 then return end
+	local w = umbrella_widget("zoom_wheel", K.WHEEL_PATH)
+	if w then w:Set(prev) end
+	Config.WriteInt(K.CFG, "wheel_prev", -1)
+	log("umbrella zoom wheel restored to " .. prev)
 end
 
 local function hold_camera()
-	local cam = state.cam_hold and cam_widget()
+	local cam = state.cam_hold and umbrella_widget("camera_distance", K.CAM_PATH)
 	if cam and cam:Get() ~= state.cam_hold then cam:Set(state.cam_hold) end
 end
 
 local function set_zoom_lock(on)
 	if on == state.zoom_on then return end
 	state.zoom_on = on
-	local cam = cam_widget()
+	set_wheel_zoom(on)
+	local cam = umbrella_widget("camera_distance", K.CAM_PATH)
 	state.cam_hold = (on and cam) and cam:Get() or nil
 	local cv = ConVar.Find(K.ZOOM_CVAR)
 	if not cv then
@@ -1043,6 +1089,10 @@ local function draw()
 	state.over_window = r ~= nil and in_rect(mx, my, state.win.x, state.win.y, ui.win_w:Get(), K.HEADER_H + ui.win_h:Get())
 	set_zoom_lock(state.over_window)
 	hold_camera()
+	if state.over_window ~= state.prev_over then
+		state.prev_over = state.over_window
+		focus_web(state.over_window)
+	end
 	if r and state.parent and state.parent:IsValid() then
 		local load = state.parent:GetAttribute("tt_load", "") or ""
 		if load ~= state.load_status then
@@ -1137,6 +1187,7 @@ end
 
 function script.OnScriptsLoaded()
 	load_positions()
+	restore_wheel_zoom()
 	local s = screen()
 	log(string.format("v%s loaded, enabled=%s, screen=%dx%d, in_game=%s",
 		K.VERSION, tostring(ui.enable:Get()), math.floor(s.x), math.floor(s.y), tostring(Engine.IsInGame())))
