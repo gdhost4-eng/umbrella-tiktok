@@ -389,7 +389,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.0.0",
+	VERSION = "1.0.1",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -433,6 +433,8 @@ if(!q){info.push(t+' null');continue;}
 info.push(t+'>'+q.paneltype);
 if(q.paneltype==t){ok=q;info.unshift('ok:'+id);}else{q.DeleteAsync(0);}}
 if(ok){try{ok.SetIgnoreCursor(true);info.push('ignorecursor');}catch(e){info.push('SetIgnoreCursor!'+e);}
+var tries=0,pending=false;var check=function(u,t){t=t||'';par.SetAttributeString('tt_load',(u||'')+' | '+t+' | retry='+tries);if(t.indexOf('Access Denied')<0&&t.indexOf('Error')!=0){if(u)tries=0;return;}if(pending||tries>=3)return;pending=true;tries++;$.Schedule(1+tries*2,function(){pending=false;if(ok.IsValid())ok.SetURL((tries&1)==1?'https://www.tiktok.com/':U);});};
+try{$.RegisterEventHandler('HTMLFinishRequest',ok,function(p,u,t){check(u,t);});$.RegisterEventHandler('HTMLTitle',ok,function(p,t){check('',t);});info.push('loadwatch');}catch(e){info.push('loadwatch!'+e);}
 try{if(ok.SetURL)ok.SetURL(U);}catch(e){info.push('SetURL!'+e);}}
 par.SetAttributeString('tt_report',info.join(' | '));]]
 
@@ -528,6 +530,8 @@ local state = {
 	zoom_missing = false,
 	over_window = false,
 	mouse3_blocked = false,
+	wheel_logged = false,
+	load_status = "",
 	web_focus = false,
 }
 
@@ -1020,6 +1024,13 @@ local function draw()
 	sync_hit("icon", hud, hud_id, icon_visible() and { state.icon.x, state.icon.y, size, size } or nil)
 	state.over_window = r ~= nil and in_rect(mx, my, state.win.x, state.win.y, ui.win_w:Get(), K.HEADER_H + ui.win_h:Get())
 	set_zoom_lock(state.over_window)
+	if r and state.parent and state.parent:IsValid() then
+		local load = state.parent:GetAttribute("tt_load", "") or ""
+		if load ~= state.load_status then
+			state.load_status = load
+			if load ~= "" then log("page " .. load) end
+		end
+	end
 	if r then
 		apply_style()
 		draw_window(mx, my)
@@ -1087,6 +1098,15 @@ function script.OnUpdate()
 end
 
 function script.OnKeyEvent(data)
+	local wheel = data.key == Enum.ButtonCode.KEY_MWHEELUP or data.key == Enum.ButtonCode.KEY_MWHEELDOWN
+		or data.event == Enum.EKeyEvent.EKeyEvent_SCROLL_UP or data.event == Enum.EKeyEvent.EKeyEvent_SCROLL_DOWN
+	if wheel then
+		if state.over_window and not state.wheel_logged then
+			state.wheel_logged = true
+			log("wheel over window blocked for game")
+		end
+		return not state.over_window
+	end
 	if data.key ~= Enum.ButtonCode.KEY_MOUSE3 then return true end
 	if data.event == Enum.EKeyEvent.EKeyEvent_KEY_DOWN then
 		state.mouse3_blocked = state.over_window == true
