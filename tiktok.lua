@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.2.9",
+	VERSION = "1.3.0",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -464,6 +464,12 @@ if(!((c>=48&&c<=90)||c==32||(c>=186&&c<=222))||!isEd(deep()))return;kp=1;
 setTimeout(function(){if(!kp)return;kp=0;w.__ttkm=(w.__ttkm||0)+1;if(w.__ttkm>=2&&w.__ttks!=='0'){w.__ttks='0';mark('k:0');}},80);},true);
 var hit=function(ev){if(!kp||!ev.isTrusted)return;kp=0;w.__ttkm=0;if(w.__ttks!=='1'){w.__ttks='1';mark('k:1');}};
 document.addEventListener('keypress',hit,true);document.addEventListener('beforeinput',hit,true);document.addEventListener('input',hit,true);
+document.addEventListener('wheel',function(ev){if(!ev.isTrusted||ev.ctrlKey||!ev.deltaY)return;var dy=ev.deltaY,e=ev.target,sc=null,cs;
+while(e&&e.nodeType==1){cs=getComputedStyle(e);if(/auto|scroll/.test(cs.overflowY)&&e.scrollHeight>e.clientHeight+1){sc=e;break;}e=e.parentElement;}
+if(!sc){sc=document.scrollingElement||document.documentElement;cs=getComputedStyle(sc);}
+if(/^(y|block|both)/.test(cs.scrollSnapType||'')){ev.preventDefault();var n=Date.now();if(n<(w.__ttwl||0))return;w.__ttwl=n+350;
+sc.scrollBy({top:(dy>0?1:-1)*sc.clientHeight,behavior:'smooth'});return;}
+sc.scrollTop+=dy*2;},{capture:true,passive:false});
 setInterval(function(){check(false);},400);
 check(true);})()]==]
 K.PAGE_JS = [==[(function(a,t,m){var r;try{r=(function(){
