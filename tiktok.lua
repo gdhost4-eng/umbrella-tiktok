@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.3.0",
+	VERSION = "1.3.1",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -444,6 +444,8 @@ K.JS_FOCUS = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.Se
 K.JS_BLUR = [[if(!p)return;if(p.BHasKeyFocus())$.DispatchEvent('DropInputFocus',p);]]
 K.JS_FOCUS_WEB = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.SetAttributeString('tt_focus',(had?'kept':'set')+' web key='+p.BHasKeyFocus());]]
 K.JS_INJECT = [[if(!p)return;p.SetURL('javascript:'+encodeURIComponent(%s+';void '+Date.now()));]]
+K.PAUSE_JS = [[(function(){var w=window,d=document;var run=function(keep){var v=d.querySelectorAll('video,audio');for(var i=0;i<v.length;i++){if(!v[i].paused){if(keep)w.__ttp.push(v[i]);v[i].pause();}}};w.__ttp=[];run(true);clearInterval(w.__tth);w.__tth=setInterval(function(){run(false);},300);})()]]
+K.PLAY_JS = [[(function(){var w=window,a=w.__ttp||[];clearInterval(w.__tth);w.__tth=0;w.__ttp=[];for(var i=0;i<a.length;i++){try{if(a[i].isConnected){var r=a[i].play();if(r&&r.catch)r.catch(function(){});}}catch(x){}}})()]]
 K.JS_KEY = [[var a=[];try{a=JSON.parse(par.GetAttributeString('tt_q','[]'))||[];}catch(e){}a.push(['k','%s',%d]);par.SetAttributeString('tt_q',JSON.stringify(a));]]
 K.WATCH_JS = [==[(function(){var w=window;
 var mark=function(s){var d=document,ot=d.title;if(ot.indexOf('tt:')>=0)ot=w.__tto||'';else w.__tto=ot;var mk='tt:'+s+':'+(w.__ttk=(w.__ttk||0)+1);d.title=mk;setTimeout(function(){if(d.title.indexOf(mk)>=0)d.title=ot;},500);};
@@ -1274,24 +1276,34 @@ local function ensure_panel(url)
 end
 
 function act.open(url)
-	url = url or K.URL_START
 	if not state.win then load_positions() end
 	clamp_positions()
-	if state.web_failed or not ensure_panel(url) then
+	local resume = state.hidden and not url and panel_valid() and state.parent_in_game == Engine.IsInGame()
+	if state.hidden and not url and not resume and state.parent and state.parent:IsValid() then
+		local last = state.parent:GetAttribute("tt_url", "") or ""
+		if last ~= "" then url = last end
+	end
+	url = url or K.URL_START
+	state.hidden = false
+	if not resume and (state.web_failed or not ensure_panel(url)) then
 		state.web_failed = true
 		log("web panel unavailable, fallback to overlay")
 		overlay_open(url)
 		return
 	end
 	state.panel:SetVisible(true)
-	set_url(url)
+	if resume then
+		parent_js(string.format(K.JS_INJECT, js_str(K.PLAY_JS)))
+	else
+		set_url(url)
+	end
 	drop_hit("header")
 	drop_hit("grip")
 	state.open = true
 	state.kids_logged = false
 	state.parent:SetAttribute("tt_kids", "")
 	parent_js(K.JS_KIDS)
-	log("window open " .. url)
+	log(resume and "window resumed" or ("window open " .. url))
 end
 
 function act.close()
@@ -1301,13 +1313,29 @@ function act.close()
 	drop_hit("grip")
 	set_zoom_lock(false)
 	state.open = false
+	state.hidden = false
 	state.auto_opened = false
 	state.press = nil
 	log("window closed")
 end
 
+function act.hide()
+	if not (panel_valid() and state.inject == "ok") then return act.close() end
+	focus_web(false)
+	parent_js(string.format(K.JS_INJECT, js_str(K.PAUSE_JS)))
+	state.panel:SetVisible(false)
+	drop_hit("header")
+	drop_hit("grip")
+	set_zoom_lock(false)
+	state.open = false
+	state.hidden = true
+	state.auto_opened = false
+	state.press = nil
+	log("window hidden, video paused")
+end
+
 function act.toggle()
-	if state.open then act.close() else act.open() end
+	if state.open then act.hide() else act.open() end
 end
 
 function act.reload()
@@ -1444,7 +1472,7 @@ local function on_release(mx, my)
 	if p.target == "icon" and not p.moved then
 		act.toggle()
 	elseif p.target == "close" and hit_test(mx, my) == "close" then
-		act.close()
+		act.hide()
 	elseif p.target == "reload" and hit_test(mx, my) == "reload" then
 		act.reload()
 	elseif p.target == "login" and hit_test(mx, my) == "login" then
@@ -1627,7 +1655,7 @@ local function update_death()
 	elseif state.alive == false and alive then
 		state.death_at = nil
 		log("hero respawned, auto_opened=" .. tostring(state.auto_opened))
-		if state.auto_opened and state.open and ui.death_close:Get() then act.close() end
+		if state.auto_opened and state.open and ui.death_close:Get() then act.hide() end
 		state.auto_opened = false
 	end
 	state.alive = alive
@@ -1653,7 +1681,7 @@ end
 
 function script.OnUpdateEx()
 	if not ui.enable:Get() or not allowed() then
-		if state.open then act.close() end
+		if state.open or state.hidden then act.close() end
 		return
 	end
 	if bind_hit("key", ui.key) then act.toggle() end
