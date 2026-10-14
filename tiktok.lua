@@ -395,7 +395,7 @@ local UI = localization.WrapLibrary(Menu)
 local L = localization.Get
 
 local K = {
-	VERSION = "1.3.1",
+	VERSION = "1.3.2",
 	CFG = "tiktok",
 	PANEL_ID = "TikTokWebPanel",
 	HIT_ID = "TikTokHit",
@@ -443,7 +443,7 @@ K.JS_CLEAN = [[var ch=par.Children();for(var i=0;i<ch.length;i++){var id=ch[i].i
 K.JS_FOCUS = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.SetAttributeString('tt_focus',(had?'kept':'set')+' bridge key='+p.BHasKeyFocus());]]
 K.JS_BLUR = [[if(!p)return;if(p.BHasKeyFocus())$.DispatchEvent('DropInputFocus',p);]]
 K.JS_FOCUS_WEB = [[if(!p)return;var had=p.BHasKeyFocus();if(!had)p.SetFocus();par.SetAttributeString('tt_focus',(had?'kept':'set')+' web key='+p.BHasKeyFocus());]]
-K.JS_INJECT = [[if(!p)return;p.SetURL('javascript:'+encodeURIComponent(%s+';void '+Date.now()));]]
+K.JS_INJECT = [[if(!p)return;var c=%s+';void '+Date.now(),n=par.GetAttributeString('tt_rj','');if(n&&typeof p[n]=='function')p[n](c);else p.SetURL('javascript:'+encodeURIComponent(c));]]
 K.PAUSE_JS = [[(function(){var w=window,d=document;var run=function(keep){var v=d.querySelectorAll('video,audio');for(var i=0;i<v.length;i++){if(!v[i].paused){if(keep)w.__ttp.push(v[i]);v[i].pause();}}};w.__ttp=[];run(true);clearInterval(w.__tth);w.__tth=setInterval(function(){run(false);},300);})()]]
 K.PLAY_JS = [[(function(){var w=window,a=w.__ttp||[];clearInterval(w.__tth);w.__tth=0;w.__ttp=[];for(var i=0;i<a.length;i++){try{if(a[i].isConnected){var r=a[i].play();if(r&&r.catch)r.catch(function(){});}}catch(x){}}})()]]
 K.JS_KEY = [[var a=[];try{a=JSON.parse(par.GetAttributeString('tt_q','[]'))||[];}catch(e){}a.push(['k','%s',%d]);par.SetAttributeString('tt_q',JSON.stringify(a));]]
@@ -535,9 +535,12 @@ info.push(t+'>'+q.paneltype);
 if(q.paneltype==t){ok=q;info.unshift('ok:'+id);}else{q.DeleteAsync(0);}}
 if(ok){if(!MENU){try{ok.SetIgnoreCursor(true);info.push('ignorecursor');}catch(e){info.push('SetIgnoreCursor!'+e);}}
 par.SetAttributeString('tt_page',PAGE);
-var st='',real=U,nn=0,ptries=0;
+var RJ='',fl=[];for(var k in ok){try{if(typeof ok[k]=='function'&&/java|script|eval|exec|run|html|url|load/i.test(k))fl.push(k);}catch(e){}}info.push('fn:'+fl.join(','));
+var rjn=['RunJavascript','RunJavaScript','ExecuteJavascript','ExecuteJavaScript','ExecuteJS','RunScript','EvaluateJavascript'];for(var i=0;i<rjn.length&&!RJ;i++){var rn=rjn[i];try{if(typeof ok[rn]=='function')RJ=rn;}catch(e){}}
+par.SetAttributeString('tt_rj',RJ);info.push('rj:'+(RJ||'none'));
+var st='',real=U,nn=0,ptries=0,blanked=false;
 var setst=function(s){st=s;par.SetAttributeString('tt_inject',s);};
-var inj=function(c){if(ok.IsValid())ok.SetURL('javascript:'+encodeURIComponent(c+';void '+(++nn)));};
+var inj=function(c){if(!ok.IsValid())return;c=c+';void '+(++nn);if(RJ){try{ok[RJ](c);return;}catch(e){}}ok.SetURL('javascript:'+encodeURIComponent(c));};
 var probe=function(){if(st=='ok'||st=='fail'||!ok.IsValid())return;if(ptries>=5){setst('fail');return;}ptries++;setst('probe'+ptries);inj(WATCH);$.Schedule(2.5,probe);};
 var fb=function(m){var kind=m[1],body=m[2];if(st!='ok')setst('ok');par.SetAttributeString('tt_mark',m[3]);
 if(kind=='e')par.SetAttributeString('tt_edit',body);else if(kind=='k')par.SetAttributeString('tt_k',body);else par.SetAttributeString('tt_fb',kind+' '+body);};
@@ -545,6 +548,7 @@ var tries=0,pending=false;var check=function(u,t){u=u||'';t=t||'';
 var mm=/tt:([a-z]+):([^:]*):([0-9]+)/.exec(t);if(mm){fb(mm);return;}if(t.indexOf('tt:')>=0)return;
 if(u.indexOf('javascript:')==0)return;
 if(u.indexOf('javascript')>=0||t.indexOf('javascript:')==0){if(st!='ok'){par.SetAttributeString('tt_fb','broken');setst('fail');ok.SetURL(real);}return;}
+if((u=='about:blank'||t=='about:blank')&&real.indexOf('http')==0){if(st!='ok'&&!blanked){blanked=true;setst('fail');par.SetAttributeString('tt_fb','csp blank, back to '+real);ok.SetURL(real);}return;}
 if(u.indexOf('http')==0){real=u;par.SetAttributeString('tt_url',u);}
 par.SetAttributeString('tt_load',u+' | '+t+' | retry='+tries);
 if(st==''&&t){setst('wait');$.Schedule(1,probe);}
@@ -1246,7 +1250,7 @@ local function ensure_panel(url)
 	state.parent, state.parent_id, state.parent_in_game = parent, parent_id, in_game
 	state.serial = state.serial + 1
 	local base = K.PANEL_ID .. state.serial
-	for _, attr in ipairs({ "tt_report", "tt_focus", "tt_inject", "tt_fb", "tt_url", "tt_edit", "tt_mark", "tt_k", "tt_q", "tt_typed" }) do
+	for _, attr in ipairs({ "tt_report", "tt_focus", "tt_inject", "tt_fb", "tt_url", "tt_rj", "tt_edit", "tt_mark", "tt_k", "tt_q", "tt_typed" }) do
 		parent:SetAttribute(attr, "")
 	end
 	state.inject, state.feedback, state.edit, state.mark, state.typed = "", "", "", "", ""
